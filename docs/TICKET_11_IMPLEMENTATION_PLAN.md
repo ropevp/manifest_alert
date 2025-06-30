@@ -88,12 +88,6 @@ def test_path_access():       # Validate selected path works
 - [ ] Test multiple PCs accessing same Google Drive folder
 - [ ] Handle sync conflicts gracefully
 
-### Network Drive Testing
-- [ ] Set path to `\\server\share\manifest_data\`
-- [ ] Test with mapped drives (`Z:\manifest_data\`)
-- [ ] Handle network connectivity issues
-- [ ] Validate multi-user access
-
 ## 📋 User Experience Flow
 
 1. **Initial Setup**: 

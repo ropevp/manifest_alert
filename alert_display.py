@@ -7,6 +7,7 @@ from PyQt5.QtGui import QColor, QFont, QIcon
 from PyQt5.QtCore import Qt, QTimer
 from scheduler import get_manifest_status
 from data_manager import load_config
+from settings_manager import get_settings_manager
 from datetime import datetime, timedelta
 from PyQt5.QtWidgets import QStyle
 from PyQt5.QtMultimedia import QSound
@@ -104,6 +105,12 @@ class AlertDisplay(QWidget):
         self.expand_btn = QPushButton("Expand All")
         self.expand_btn.clicked.connect(self.expand_all)
         btn_layout.addWidget(self.expand_btn)
+        
+        self.settings_btn = QPushButton("⚙ Settings")
+        self.settings_btn.setToolTip("Configure Settings (Acknowledgment Name, Data Storage)")
+        self.settings_btn.clicked.connect(self.show_settings)
+        btn_layout.addWidget(self.settings_btn)
+        
         # Spacer to push secondary actions to right
         btn_layout.addStretch()
         # Secondary actions on right
@@ -165,7 +172,9 @@ class AlertDisplay(QWidget):
         self.update_clock_and_countdown()
         
         # Initialize acknowledgment file timestamp after first populate
-        ack_path = os.path.join(os.path.dirname(__file__), 'logs', 'acknowledgments.json')
+        from settings_manager import get_settings_manager
+        settings = get_settings_manager()
+        ack_path = settings.get_acknowledgments_path()
         if os.path.exists(ack_path):
             try:
                 self.last_ack_check_time = os.path.getmtime(ack_path)
@@ -333,8 +342,29 @@ class AlertDisplay(QWidget):
             self.setWindowState(Qt.WindowMaximized)
 
     def reload_config(self):
+        # Reset file change tracking when reloading config (for path changes)
+        self.last_ack_check_time = None
+        
+        # Store current window state before reloading
+        was_visible = self.isVisible()
+        current_state = self.windowState()
+        
         self.populate_list()
         self.update_clock_and_countdown()
+        
+        # Restore window visibility and state after reload
+        if was_visible:
+            if current_state & Qt.WindowMaximized:
+                self.setWindowState(Qt.WindowMaximized)
+            elif current_state & Qt.WindowFullScreen:
+                self.setWindowState(Qt.WindowFullScreen)
+            else:
+                self.setWindowState(Qt.WindowNoState)
+            
+            self.show()
+            self.raise_()
+            self.activateWindow()
+        
         from PyQt5.QtWidgets import QMessageBox
         QMessageBox.information(self, "Config Reloaded", "Configuration reloaded from disk.")
     def update_clock_and_countdown(self):
@@ -366,14 +396,24 @@ class AlertDisplay(QWidget):
                 )
                 group.setExpanded(has_alerting)
             if not (self.snooze_until and datetime.now() < self.snooze_until):
-                # Only maximize if not in fullscreen
-                if not (self.windowState() & Qt.WindowFullScreen):
+                # Preserve current window state while ensuring visibility
+                current_state = self.windowState()
+                
+                # Only maximize if not in fullscreen and not already maximized
+                if not (current_state & Qt.WindowFullScreen) and not (current_state & Qt.WindowMaximized):
                     self.setWindowState(Qt.WindowMaximized)
-                self.show()
+                
+                # Ensure window is visible and active without disrupting state
+                if not self.isVisible():
+                    self.show()
                 self.raise_()
-                self.activateWindow()                # Keep on top while active
-                self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-                self.show()
+                self.activateWindow()
+                
+                # Set always-on-top flag only if not already set
+                if not (self.windowFlags() & Qt.WindowStaysOnTopHint):
+                    self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+                    # Don't call show() after setting flags - it can cause minimization
+                
                 # Play sound immediately on active
                 self.check_and_play_sound()
             # Continue to check for late message (don't return early)
@@ -449,11 +489,19 @@ class AlertDisplay(QWidget):
             self.set_countdown_text(f"Next Manifest in {time_msg}")
         else:
             self.set_countdown_text("")
-        # No longer active: disable always-on-top
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
-        # Ensure window stays visible state
-        if self.isVisible(): 
-            self.show()
+        
+        # Always disable always-on-top when no alerts (but preserve window visibility)
+        if not any_alerting:
+            # Only change the flag if it's currently set to avoid unnecessary updates
+            if self.windowFlags() & Qt.WindowStaysOnTopHint:
+                self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
+                # Don't call show() after setting flags - preserve current state
+            
+            # Ensure window stays visible regardless
+            if self.isVisible(): 
+                self.show()
+                self.raise_()
+                self.activateWindow()
             
         # Check sound without altering group expansion (retain manual state)
         self.check_and_play_sound()
@@ -550,7 +598,7 @@ class AlertDisplay(QWidget):
 
     def refresh_list(self):
         """Refresh data and adapt refresh rate for multi-PC synchronization"""
-        # Check for acknowledgment changes from other PCs
+        # Always check for acknowledgment changes from other PCs, regardless of current state
         self.check_acknowledgment_changes()
         
         # Update UI components
@@ -562,7 +610,9 @@ class AlertDisplay(QWidget):
     
     def check_acknowledgment_changes(self):
         """Check for acknowledgment file changes from other PCs and refresh if needed"""
-        ack_path = os.path.join(os.path.dirname(__file__), 'logs', 'acknowledgments.json')
+        from settings_manager import get_settings_manager
+        settings = get_settings_manager()
+        ack_path = settings.get_acknowledgments_path()
         
         if not os.path.exists(ack_path):
             return
@@ -573,11 +623,43 @@ class AlertDisplay(QWidget):
             
             # If this is first check or file has been modified since last check
             if self.last_ack_check_time is None or file_mod_time > self.last_ack_check_time:
-                self.last_ack_check_time = file_mod_time
-                
                 # Only rebuild if not the first check (avoid duplicate initial load)
-                if self.last_ack_check_time != file_mod_time:
+                if self.last_ack_check_time is not None:
+                    # Store comprehensive window state before rebuilding
+                    was_visible = self.isVisible()
+                    was_active = self.isActiveWindow()
+                    current_state = self.windowState()
+                    current_pos = self.pos()
+                    current_size = self.size()
+                    
                     self.populate_list()  # Rebuild list with new acknowledgment data
+                    
+                    # Aggressively restore window state after refresh
+                    if was_visible:
+                        # Force window to be visible and properly positioned
+                        self.setGeometry(current_pos.x(), current_pos.y(), current_size.width(), current_size.height())
+                        
+                        # Restore exact window state
+                        if current_state & Qt.WindowMaximized:
+                            self.setWindowState(Qt.WindowMaximized)
+                        elif current_state & Qt.WindowFullScreen:
+                            self.setWindowState(Qt.WindowFullScreen)
+                        else:
+                            self.setWindowState(Qt.WindowNoState)
+                        
+                        # Force window to be visible and focused
+                        self.show()
+                        self.raise_()
+                        self.activateWindow()
+                        
+                        # Extra assurance - force it to stay on top temporarily then remove
+                        if was_active:
+                            # If window was active, ensure it regains focus without flag changes
+                            self.raise_()
+                            self.activateWindow()
+                
+                # Update the timestamp after processing
+                self.last_ack_check_time = file_mod_time
                     
         except Exception as e:
             # Silent failure - don't disrupt operation
@@ -597,16 +679,16 @@ class AlertDisplay(QWidget):
         # Determine if we should use fast refresh (5 seconds during alerts)
         should_fast_refresh = has_active_alerts
         
-        # Only change timer if state has changed to avoid unnecessary timer restarts
-        if should_fast_refresh != self.fast_refresh_active:
-            self.fast_refresh_active = should_fast_refresh
-            
-            if should_fast_refresh:
-                # Fast refresh during active/missed alerts for real-time multi-PC sync
-                self.refresh_timer.start(5000)  # 5 seconds for real-time sync
-            else:
-                # Normal refresh when no alerts active
-                self.refresh_timer.start(30000)  # 30 seconds normal operation
+        # Always ensure timer is running, even if state hasn't changed
+        # This fixes issues where timer might get stopped in certain conditions
+        if should_fast_refresh:
+            # Fast refresh during active/missed alerts for real-time multi-PC sync
+            self.refresh_timer.start(5000)  # 5 seconds for real-time sync
+            self.fast_refresh_active = True
+        else:
+            # Normal refresh when no alerts active - ALWAYS run timer in green mode
+            self.refresh_timer.start(30000)  # 30 seconds normal operation
+            self.fast_refresh_active = False
     def check_and_play_sound(self):
         # Skip alerts during snooze
         if self.snooze_until and datetime.now() < self.snooze_until:
@@ -762,8 +844,10 @@ class AlertDisplay(QWidget):
         manifests = sorted(config.get('manifests', []), key=lambda m: datetime.strptime(m['time'], "%H:%M"))
         now = datetime.now()
         today = now.date().isoformat()
-        # Load today's acks
-        ack_path = os.path.join(os.path.dirname(__file__), 'logs', 'acknowledgments.json')
+        # Load today's acks from configurable path
+        from settings_manager import get_settings_manager
+        settings = get_settings_manager()
+        ack_path = settings.get_acknowledgments_path()
         import shutil
         if os.path.exists(ack_path):
             try:
@@ -814,15 +898,17 @@ class AlertDisplay(QWidget):
                     status = get_manifest_status(time, now)
                     if ack:
                         # Always show acknowledged as green, except 'Missed' (Ack Late is orange)
+                        username = ack.get('acknowledged_by', 'Unknown')
                         if ack['status'] == 'Missed':
                             reason = ack.get('reason')
-                            text = f"{carrier} - Acknowledged Late"
                             if reason:
-                                text += f" - {reason}"
+                                text = f"{carrier} - Acknowledged Late: {reason} - {username}"
+                            else:
+                                text = f"{carrier} - Acknowledged Late - {username}"
                             color = ack_late_color
                             has_ack_late = True
                         else:
-                            text = f"{carrier} - Acknowledged"
+                            text = f"{carrier} - Acknowledged - {username}"
                             color = ack_color
                             has_ack = True
                     else:
@@ -842,8 +928,8 @@ class AlertDisplay(QWidget):
                     child.setFlags(child.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
                     child.setForeground(0, color)
                     group.addChild(child)
-                    # Only flash Active items
-                    if 'Active' in text:
+                    # Flash Active and Missed items (both trigger alerts and can be snoozed)
+                    if 'Active' in text or 'Missed' in text:
                         self.flashing_items.append(child)
             # After adding children, set group header color by priority
             if has_ack_late:
@@ -890,6 +976,21 @@ class AlertDisplay(QWidget):
                 continue  # Skip if time parsing fails
         
         # Apply expansion logic
+        # First, check if ALL groups are fully acknowledged (no Active, Missed, or Open manifests)
+        all_groups_acknowledged = True
+        for i in range(self.tree_widget.topLevelItemCount()):
+            grp = self.tree_widget.topLevelItem(i)
+            has_unacknowledged = any(
+                (' - Active' in grp.child(j).text(0) or 
+                 ' - Missed' in grp.child(j).text(0) or 
+                 ' - Open' in grp.child(j).text(0))
+                for j in range(grp.childCount())
+            )
+            if has_unacknowledged:
+                all_groups_acknowledged = False
+                break
+        
+        # Apply expansion rules based on overall state
         for i in range(self.tree_widget.topLevelItemCount()):
             grp = self.tree_widget.topLevelItem(i)
             
@@ -898,7 +999,7 @@ class AlertDisplay(QWidget):
             has_missed = any(' - Missed' in grp.child(j).text(0) for j in range(grp.childCount()))
             has_open = any(' - Open' in grp.child(j).text(0) for j in range(grp.childCount()))
             has_only_acknowledged = all(
-                (' - Acknowledged' in grp.child(j).text(0) or ' - Acknowledged Late' in grp.child(j).text(0))
+                (' - Acknowledged' in grp.child(j).text(0))
                 for j in range(grp.childCount())
             )
             
@@ -906,8 +1007,11 @@ class AlertDisplay(QWidget):
             if has_active or has_missed:
                 # Always expand Active or Missed
                 grp.setExpanded(True)
+            elif all_groups_acknowledged:
+                # If everything is fully acknowledged, expand all to show the completed work
+                grp.setExpanded(True)
             elif has_only_acknowledged:
-                # Collapse if everything is acknowledged
+                # Collapse if everything is acknowledged but other groups still have work
                 grp.setExpanded(False)
             elif has_open and i == next_open_group:
                 # Expand next upcoming Open group
@@ -1054,9 +1158,13 @@ class AlertDisplay(QWidget):
         self.snooze_until = None
         self.show()
         self.populate_list()
-        self.update_clock_and_countdown()        # Ensure always-on-top when coming out of snooze if alerts active
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-        self.show()
+        self.update_clock_and_countdown()
+        
+        # Ensure always-on-top when coming out of snooze if alerts active
+        # Only set flag if not already set to avoid window state issues
+        if not (self.windowFlags() & Qt.WindowStaysOnTopHint):
+            self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+            # Don't call show() after setting flags
 
     def switch_monitor(self):
         """Cycle window to the next available screen"""
@@ -1237,6 +1345,26 @@ class AlertDisplay(QWidget):
                     child.setForeground(0, ack_late_color)
                 elif "- Acknowledged" in child_text:
                     child.setForeground(0, ack_color)
+
+    def show_settings(self):
+        """Show the settings dialog for configuring acknowledgment name and data storage locations"""
+        from settings_manager import SettingsDialog, get_settings_manager
+        
+        settings_manager = get_settings_manager()
+        dialog = SettingsDialog(settings_manager, self)
+        
+        if dialog.exec_() == SettingsDialog.Accepted:
+            # Settings were saved, optionally reload config
+            from PyQt5.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self,
+                "Reload Configuration?",
+                "Settings have been updated. Would you like to reload the configuration now?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self.reload_config()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

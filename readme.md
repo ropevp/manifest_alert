@@ -1,14 +1,23 @@
 # Manifest Alert System ✅ PRODUCTION READY
 
-A professional warehouse desktop application for Windows providing intelligent voice alerts and visual tracking for shipping manifests. Optimized for 24/7 warehouse operations with robust error handling and zero-maintenance design.
+A professional warehouse desktop application for Windows providing intelligent voice alerts and visual tracking for shipping manifests. Optimized for 24/7 warehouse operations with robust error handling, user accountability, and zero-maintenance design.
 
 ## 🚀 DEPLOYMENT STATUS
 - **GitHub Repository**: [manifest_alert](https://github.com/ropevp/manifest_alert) ✅
 - **Production Ready**: All core functionality implemented and tested ✅  
 - **Voice System**: Professional text-to-speech with intelligent announcements ✅
+- **User Accountability**: Custom names and username tracking ✅
 - **Documentation**: Complete user guides and technical documentation ✅
 
 ## Core Features ✅ ALL IMPLEMENTED
+
+### 👤 **User Accountability & Custom Names**
+*   **Custom Acknowledgment Names:** Set personalized display names in settings
+*   **Windows Username Fallback:** Automatic fallback to Windows username
+*   **Comprehensive Tracking:** All acknowledgments logged with user identification
+*   **Professional Display:** Clean format showing "Carrier - Acknowledged - UserName"
+*   **Settings Integration:** Easy configuration through settings dialog
+*   **JSON Persistence:** User preferences saved automatically
 
 ### 🎙️ **Intelligent Voice Announcements**
 *   **Professional Zira Voice:** Clear, warehouse-optimized speech synthesis
@@ -21,41 +30,46 @@ A professional warehouse desktop application for Windows providing intelligent v
     *   Multiple Missed: "Multiple missed manifests. Please acknowledge" 
     *   Mixed: "Multiple Missed and Active Manifests. Please acknowledge"
 
-### 🖥️ **Advanced Window Management**
+### 🖥️ **Enhanced Window Management**
+*   **Zero Minimization:** Robust window state preservation during all operations
 *   **Smart Display Priority:** Active alerts override Missed for full-screen prominence
 *   **Always-on-Top:** Stays above all windows during critical alerts
 *   **Multi-Monitor Support:** Seamless cycling between all connected displays
-*   **Consistent Behavior:** Window remains maximized after all acknowledgment types
-*   **Auto-Maximize:** Automatically maximizes during Active/Missed alerts
+*   **Adaptive Refresh:** 5-second refresh during alerts, 30-second normal operation
+*   **Auto-Expand Logic:** Groups expand automatically when all items acknowledged
 
-### 📊 **Visual Status System**
+### 📊 **Advanced Visual Status System**
 *   **Color-Coded Status Indicators:**
     *   **Open (Blue):** Upcoming manifest (0-15 minutes before due)
     *   **Active (Red):** Currently due manifest (0-29 minutes late)
     *   **Missed (Dark Red):** Overdue manifest (30+ minutes late)
     *   **Acknowledged (Green):** Successfully handled manifests
     *   **Acknowledged Late (Orange):** Late manifests with logged reasons
-*   **Real-Time Updates:** 30-second refresh cycle with immediate alert responses
-*   **Tree-Style Organization:** Collapsible groups by time with carrier details
+*   **Real-Time Updates:** Adaptive refresh timing with immediate alert responses
+*   **Tree-Style Organization:** Smart collapsible groups with expansion logic
+*   **Professional Icons:** Custom taskbar and system tray icons
 
 ### 🔊 **Multi-Layer Audio System**
 *   **Continuous Alert Sound:** Immediate attention-grabbing beep (alert.wav)
 *   **Voice Announcements:** Every 20 seconds with professional speech synthesis
 *   **Synchronized Audio:** Both systems work harmoniously without conflicts
-*   **Snooze Support:** Complete audio silence during snooze periods
+*   **Enhanced Snooze:** Works for both Active and Missed manifests
+*   **Configurable Duration:** 1-30 minute snooze options
 
-### 📝 **Comprehensive Logging & Tracking**
-*   **Complete Audit Trail:** All acknowledgments logged with timestamps
+### 📝 **Comprehensive Logging & User Tracking**
+*   **Complete Audit Trail:** All acknowledgments logged with timestamps and usernames
+*   **Custom Name Support:** Display names or Windows usernames in logs
 *   **Reason Tracking:** Mandatory reason entry for missed manifests
+*   **Professional Format:** "Carrier - Acknowledged Late: reason - UserName"
 *   **JSON Format:** Human-readable logs in `logs/acknowledgments.json`
 *   **Data Validation:** Error recovery for corrupted log files
-*   **Daily Reset:** Automatic midnight rollover with data preservation
 
-### 🛠️ **System Tray Integration**
-*   **Minimal Footprint:** Lives in system tray when not alerting
-*   **Quick Access Menu:** Show/Hide window, Exit application
-*   **Professional Icon:** Clear visibility in system tray area
-*   **Warehouse-Optimized:** No accidental closing, always accessible
+### 🛠️ **System Integration & Settings**
+*   **Professional System Tray:** Custom icon integration
+*   **Taskbar Icon Fix:** Proper Windows taskbar icon display
+*   **Configurable Settings:** Comprehensive settings dialog with validation
+*   **Path Management:** Customizable data and log file locations
+*   **Auto-Configuration:** Intelligent defaults with user customization
 
 ### ⏰ **Advanced Scheduling**
 *   **Flexible Configuration:** JSON-based manifest time and carrier setup
@@ -153,7 +167,80 @@ A professional warehouse desktop application for Windows providing intelligent v
 - ✅ Confirm window maximizes during alerts
 - ✅ Validate multi-monitor support if applicable
 
-## 📖 Documentation
+## 🏭 Latest Enhancements (v2.0)
+
+### ✨ **Recent Updates**
+- **Custom User Names**: Personalized acknowledgment display names with 20-character limit
+- **Enhanced Window Stability**: Zero minimization during color changes and operations  
+- **Improved Snooze Logic**: Snooze button appears for both Active and Missed manifests
+- **Professional Icon Integration**: Proper taskbar and system tray icon display
+- **Adaptive Timer Logic**: Guaranteed 30-second timer operation in all states
+- **Smart Expansion Rules**: Groups expand when all items are acknowledged
+- **Username Format**: Clean "Carrier - Acknowledged - Name" display format
+
+## 🛠️ Git Repository Cleanup Guide
+
+### Current Status
+- **Main Branch**: `Alert_and_UI_update` (current production code)
+- **Recommended Action**: Merge to main and clean up old branches
+
+### Step-by-Step Cleanup
+
+#### 1. Merge Current Branch to Main
+```bash
+# Switch to main branch
+git checkout main
+
+# Merge your current branch
+git merge Alert_and_UI_update
+
+# Push updated main
+git push origin main
+```
+
+#### 2. Delete Old Remote Branches
+```bash
+# List all remote branches
+git branch -r
+
+# Delete specific remote branches (replace branch-name with actual names)
+git push origin --delete old-branch-name
+git push origin --delete another-old-branch
+
+# Example for common branch names:
+git push origin --delete feature/initial-setup
+git push origin --delete hotfix/bug-fixes
+```
+
+#### 3. Clean Up Local Branches
+```bash
+# List local branches
+git branch
+
+# Delete local branches
+git branch -d old-branch-name
+git branch -D force-delete-branch-name
+
+# Clean up tracking references
+git remote prune origin
+```
+
+#### 4. Set Main as Default Branch
+```bash
+# Ensure main is default locally
+git checkout main
+
+# Push and set upstream
+git push -u origin main
+```
+
+### GitHub Web Interface Cleanup
+1. Go to your repository on GitHub.com
+2. Navigate to **Settings** → **Branches**
+3. Set `main` as the default branch
+4. Go to **Branches** tab and delete old branches using the trash icon
+
+## 📖 Updated Documentation
 
 ### User Guides
 - **`USER_INSTRUCTIONS.md`** - Complete operator manual with screenshots
@@ -185,13 +272,18 @@ A professional warehouse desktop application for Windows providing intelligent v
 
 The Manifest Alert System is **production-ready** with all core functionality implemented, tested, and documented. Features professional voice announcements, robust error handling, and warehouse-optimized visual alerts for reliable 24/7 operation.
 
-### ✅ Deployment Checklist
+### ✅ Enhanced Deployment Checklist
 - [x] Voice announcements tested and verified
-- [x] Window management bugs resolved  
-- [x] Multi-monitor support implemented
-- [x] Comprehensive user documentation created
+- [x] Window management stability ensured (zero minimization)
+- [x] Multi-monitor support implemented  
+- [x] Custom user names and accountability tracking
+- [x] Professional taskbar and system tray icons
+- [x] Adaptive refresh timing (5s alerts, 30s normal)
+- [x] Smart group expansion logic
+- [x] Enhanced snooze functionality for Active/Missed
+- [x] Comprehensive user documentation updated
 - [x] Error handling and recovery systems in place
 - [x] Test suites available for validation
-- [x] GitHub repository established with version control
+- [x] GitHub repository with latest production code
 
-**Ready for immediate warehouse deployment.**
+**Ready for immediate warehouse deployment with enhanced user accountability and professional UI.**

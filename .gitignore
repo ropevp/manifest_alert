@@ -1,3 +1,15 @@
-# Manifest Alerts log and config files
+# App data folder (contains settings and configurable data files)
+app_data/
+
+# Test outputs and temporary files
+tests/output/
+tests/__pycache__/
+*.log
+*.tmp
+
+# Backup files
+backup/
+
+# Legacy paths (for backward compatibility)
 logs/acknowledgments.json
 data/config.json
