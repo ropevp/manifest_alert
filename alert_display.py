@@ -257,7 +257,7 @@ class AlertDisplay(QWidget):
             minutes_late = int((now - manifest_time).total_seconds() / 60)
             
             if minutes_late >= 30:  # Missed (30+ minutes late)
-                text = f"Manifest Missed. at {spoken_time}. Manifest is {minutes_late} minutes Late"
+                text = f"Manifest Missed, at {spoken_time}. Manifest is {minutes_late} minutes Late"
             else:  # Active (0-29 minutes late)
                 text = f"Manifest. at {spoken_time}"
                 
@@ -444,21 +444,21 @@ class AlertDisplay(QWidget):
 
     def update_visual_alerts(self):
         """Update status band and background based on most urgent manifest status"""
-        # Priority order: Missed > Active > Open > All Acknowledged
+        # Priority order: Active > Missed > Open > All Acknowledged
         
-        # Check for Missed manifests (highest priority - dark red)
+        # Check for Active manifests (highest priority - red)
+        has_active = any(
+            "Active" in self.tree_widget.topLevelItem(i).child(j).text(0)
+            for i in range(self.tree_widget.topLevelItemCount())
+            for j in range(self.tree_widget.topLevelItem(i).childCount())
+        )
+        
+        # Check for Missed manifests (second priority - dark red)
         has_missed = any(
             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0)
             for i in range(self.tree_widget.topLevelItemCount())
             for j in range(self.tree_widget.topLevelItem(i).childCount())
             if not ("Acknowledged" in self.tree_widget.topLevelItem(i).child(j).text(0))
-        )
-        
-        # Check for Active manifests (second priority - red)
-        has_active = any(
-            "Active" in self.tree_widget.topLevelItem(i).child(j).text(0)
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
         )
         
         # Check for Open manifests (third priority - blue)
@@ -467,13 +467,13 @@ class AlertDisplay(QWidget):
             for i in range(self.tree_widget.topLevelItemCount())
             for j in range(self.tree_widget.topLevelItem(i).childCount())
         )        # Determine colors based on status
-        if has_missed:
-            clock_bg_color = "rgba(139, 0, 0, 0.8)"  # Semi-transparent dark red
-            message_bar_color = "rgb(139, 0, 0)"  # Dark red for message bar
-            self.background_flashing = True
-        elif has_active:
+        if has_active:
             clock_bg_color = "rgba(255, 0, 0, 0.8)"  # Semi-transparent red
             message_bar_color = "rgb(255, 0, 0)"  # Red for message bar
+            self.background_flashing = True
+        elif has_missed:
+            clock_bg_color = "rgba(139, 0, 0, 0.8)"  # Semi-transparent dark red
+            message_bar_color = "rgb(139, 0, 0)"  # Dark red for message bar
             self.background_flashing = True
         elif has_open:
             clock_bg_color = "rgba(38, 132, 255, 0.8)"  # Semi-transparent blue
@@ -609,6 +609,10 @@ class AlertDisplay(QWidget):
                 QMessageBox.information(self, 'Acknowledged', f'All Active/Missed manifests at {manifest_time} acknowledged.')
                 self.populate_list()
                 self.update_clock_and_countdown()
+                # Ensure window remains visible and stays on top
+                self.show()
+                self.raise_()
+                self.activateWindow()
             return
         text = selected.text(0)
         # Only children (manifests) are acknowledgeable
@@ -638,6 +642,10 @@ class AlertDisplay(QWidget):
                     QMessageBox.warning(self, "Log Error", f"Failed to log acknowledgment: {e}")
                 self.populate_list()
                 self.update_clock_and_countdown()
+                # Ensure window remains visible and stays on top
+                self.show()
+                self.raise_()
+                self.activateWindow()
             else:
                 QMessageBox.information(self, "No Reason", "Acknowledgment cancelled: reason required.")
             return
