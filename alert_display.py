@@ -34,43 +34,49 @@ class AlertDisplay(QWidget):
         
         layout.setSpacing(2)
         
-        # Clock label centered at top
+        # Combined clock and message bar in horizontal layout
+        self.clock_message_bar = QFrame()
+        self.clock_message_bar.setFixedHeight(90)  # Increased height for large clock font
+        self.clock_message_bar.setStyleSheet("background-color: rgba(0, 0, 0, 0.1);")  # Subtle background
+        
+        # Horizontal layout for clock and message
+        clock_message_layout = QHBoxLayout(self.clock_message_bar)
+        clock_message_layout.setContentsMargins(15, 2, 15, 2)  # Reduced padding
+        clock_message_layout.setSpacing(40)  # Space between clock and message
+        
+        # Clock label on the left
         self.clock_label = QLabel()
-        self.clock_label.setAlignment(Qt.AlignCenter)
+        self.clock_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         digital_font = QFont('Segoe UI', 48, QFont.Bold)
         self.clock_label.setFont(digital_font)
         self.clock_label.setStyleSheet("""
             color: white;
             background: rgba(0, 0, 0, 0.3);
             border-radius: 8px;
-            padding: 10px;
-            margin: 5px;
-        """)        
+            padding: 8px 12px;
+            margin: 2px;
+        """)
+        self.clock_label.setMinimumWidth(200)  # Ensure consistent clock width
         
-        layout.addWidget(self.clock_label)
-        
-        # Combined message bar for speech ticker and countdown/status messages
-        self.message_bar = QFrame()
-        self.message_bar.setFixedHeight(50)
-        self.message_bar.setStyleSheet("background-color: rgba(0, 0, 0, 0.1);")  # Subtle background
-        
-        # Layout for the message bar content
-        message_layout = QHBoxLayout(self.message_bar)
-        message_layout.setContentsMargins(20, 5, 20, 5)
-        
-        # Combined label for both speech ticker and countdown messages
+        # Combined message label on the right
         self.combined_message_label = QLabel()
-        self.combined_message_label.setAlignment(Qt.AlignCenter)
+        self.combined_message_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         message_font = QFont('Segoe UI', 18, QFont.Bold)
         self.combined_message_label.setFont(message_font)
         self.combined_message_label.setStyleSheet("""
             color: white;
             background: transparent;
-            padding: 5px;
+            padding: 2px;
         """)
-        message_layout.addWidget(self.combined_message_label)
+        self.combined_message_label.setWordWrap(True)  # Allow text wrapping
         
-        layout.addWidget(self.message_bar)
+        # Add to horizontal layout with proper spacing
+        clock_message_layout.addWidget(self.clock_label, 0)  # Clock takes minimum space
+        clock_message_layout.addStretch(1)  # Flexible space in middle for centering effect
+        clock_message_layout.addWidget(self.combined_message_label, 2)  # Message takes more space
+        clock_message_layout.addStretch(1)  # Flexible space at end for balance
+        
+        layout.addWidget(self.clock_message_bar)
         # Manifest list as collapsible tree
         from PyQt5.QtWidgets import QAbstractItemView
         self.tree_widget = QTreeWidget()
@@ -129,14 +135,18 @@ class AlertDisplay(QWidget):
         self.background_flashing = False
         self.flash_timer = QTimer(self)
         self.flash_timer.timeout.connect(self.toggle_flashing)
-        self.flash_timer.start(500)
+        self.flash_timer.start(700)  # 0.7 second flash for optimal visual impact
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.update_clock_and_countdown)
         self.clock_timer.start(1000)
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_list)
-        self.refresh_timer.start(30000)
+        self.refresh_timer.start(30000)  # Default 30 seconds
         self.current_date = datetime.now().date()
+        
+        # Track refresh state for adaptive timing during multi-PC sync
+        self.fast_refresh_active = False
+        self.last_ack_check_time = None
           # Initialize speech timer before first update
         self.speech_timer = QTimer(self)
         self.speech_timer.timeout.connect(self.speak_active_alert)
@@ -152,7 +162,15 @@ class AlertDisplay(QWidget):
         # Flag to apply auto-expansion only once
         self.first_populate = True
         self.populate_list()
-        self.update_clock_and_countdown()        # System tray integration
+        self.update_clock_and_countdown()
+        
+        # Initialize acknowledgment file timestamp after first populate
+        ack_path = os.path.join(os.path.dirname(__file__), 'logs', 'acknowledgments.json')
+        if os.path.exists(ack_path):
+            try:
+                self.last_ack_check_time = os.path.getmtime(ack_path)
+            except Exception:
+                self.last_ack_check_time = None        # System tray integration
         from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
         icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
         tray_icon = QSystemTrayIcon(
@@ -259,7 +277,7 @@ class AlertDisplay(QWidget):
             if minutes_late >= 30:  # Missed (30+ minutes late)
                 text = f"Manifest Missed, at {spoken_time}. Manifest is {minutes_late} minutes Late"
             else:  # Active (0-29 minutes late)
-                text = f"Manifest. at {spoken_time}"
+                text = f"Manifest at {spoken_time}"
                 
         except Exception:
             text = f"Manifest"
@@ -310,9 +328,7 @@ class AlertDisplay(QWidget):
         """Toggle the visibility of the window - Disabled for warehouse TV display."""
         # In warehouse environment, window should always remain visible
         # Just bring to front and focus instead of hiding
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        self._bring_to_front()
         if self.isMinimized():
             self.setWindowState(Qt.WindowMaximized)
 
@@ -494,34 +510,103 @@ class AlertDisplay(QWidget):
         """)
         
         # Update message bar background
-        self.message_bar.setStyleSheet(f"background-color: {message_bar_color};")
+        self.clock_message_bar.setStyleSheet(f"background-color: {message_bar_color};")
         
-        # Set clean background for the whole interface
-        self.setStyleSheet("""
-            QWidget {{
-                background-color: #f5f5f5;
-            }}
-            QTreeWidget {{
-                background-color: white;
-                color: black;
-                border: 1px solid #ccc;
-            }}
-            QPushButton {{
-                background-color: white;
-                color: black;
-                border: 1px solid #999;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: #e0e0e0;            }}
-        """)
+        # Set background styling based on alert status
+        if self.background_flashing:
+            # Don't set static styles when background is flashing - let toggle_flashing handle it
+            pass
+        else:
+            # Set clean background for normal state (no active/missed alerts)
+            self.setStyleSheet("""
+                QWidget {{
+                    background-color: #f5f5f5;
+                }}
+                QTreeWidget {{
+                    background-color: white;
+                    color: black;
+                    border: 1px solid #ccc;
+                }}
+                QPushButton {{
+                    background-color: white;
+                    color: black;
+                    border: 1px solid #999;
+                    padding: 8px 12px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background-color: #e0e0e0;
+                }}
+            """)
+            # Also reset tree widget to normal styling when not flashing
+            self.tree_widget.setStyleSheet("""
+                QTreeWidget {{
+                    background-color: white;
+                    color: black;
+                    border: 1px solid #ccc;
+                }}
+            """)
 
     def refresh_list(self):
-        # Skip full rebuild to preserve manual expand state
+        """Refresh data and adapt refresh rate for multi-PC synchronization"""
+        # Check for acknowledgment changes from other PCs
+        self.check_acknowledgment_changes()
+        
+        # Update UI components
         self.check_and_play_sound()
         self.update_clock_and_countdown()
+        
+        # Adaptive refresh timing for multi-PC sync
+        self.update_refresh_timing()
+    
+    def check_acknowledgment_changes(self):
+        """Check for acknowledgment file changes from other PCs and refresh if needed"""
+        ack_path = os.path.join(os.path.dirname(__file__), 'logs', 'acknowledgments.json')
+        
+        if not os.path.exists(ack_path):
+            return
+            
+        try:
+            # Get file modification time
+            file_mod_time = os.path.getmtime(ack_path)
+            
+            # If this is first check or file has been modified since last check
+            if self.last_ack_check_time is None or file_mod_time > self.last_ack_check_time:
+                self.last_ack_check_time = file_mod_time
+                
+                # Only rebuild if not the first check (avoid duplicate initial load)
+                if self.last_ack_check_time != file_mod_time:
+                    self.populate_list()  # Rebuild list with new acknowledgment data
+                    
+        except Exception as e:
+            # Silent failure - don't disrupt operation
+            pass
+    
+    def update_refresh_timing(self):
+        """Adapt refresh timing based on current alert status for multi-PC sync"""
+        # Check if we have any active or missed alerts that need fast sync
+        has_active_alerts = any(
+            ("Active" in self.tree_widget.topLevelItem(i).child(j).text(0) or
+             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0))
+            for i in range(self.tree_widget.topLevelItemCount())
+            for j in range(self.tree_widget.topLevelItem(i).childCount())
+            if not "Acknowledged" in self.tree_widget.topLevelItem(i).child(j).text(0)
+        )
+        
+        # Determine if we should use fast refresh (5 seconds during alerts)
+        should_fast_refresh = has_active_alerts
+        
+        # Only change timer if state has changed to avoid unnecessary timer restarts
+        if should_fast_refresh != self.fast_refresh_active:
+            self.fast_refresh_active = should_fast_refresh
+            
+            if should_fast_refresh:
+                # Fast refresh during active/missed alerts for real-time multi-PC sync
+                self.refresh_timer.start(5000)  # 5 seconds for real-time sync
+            else:
+                # Normal refresh when no alerts active
+                self.refresh_timer.start(30000)  # 30 seconds normal operation
     def check_and_play_sound(self):
         # Skip alerts during snooze
         if self.snooze_until and datetime.now() < self.snooze_until:
@@ -609,6 +694,8 @@ class AlertDisplay(QWidget):
                 QMessageBox.information(self, 'Acknowledged', f'All Active/Missed manifests at {manifest_time} acknowledged.')
                 self.populate_list()
                 self.update_clock_and_countdown()
+                # Trigger immediate refresh for other PCs
+                self.update_refresh_timing()
                 # Ensure window remains visible and stays on top
                 self.show()
                 self.raise_()
@@ -642,10 +729,9 @@ class AlertDisplay(QWidget):
                     QMessageBox.warning(self, "Log Error", f"Failed to log acknowledgment: {e}")
                 self.populate_list()
                 self.update_clock_and_countdown()
-                # Ensure window remains visible and stays on top
-                self.show()
-                self.raise_()
-                self.activateWindow()
+                # Trigger immediate refresh for other PCs
+                self.update_refresh_timing()
+                self._bring_to_front()
             else:
                 QMessageBox.information(self, "No Reason", "Acknowledgment cancelled: reason required.")
             return
@@ -658,10 +744,9 @@ class AlertDisplay(QWidget):
                 QMessageBox.warning(self, "Log Error", f"Failed to log acknowledgment: {e}")            # Refresh list and countdown
             self.populate_list()
             self.update_clock_and_countdown()
-            # Ensure window remains visible and stays on top
-            self.show()
-            self.raise_()
-            self.activateWindow()
+            # Trigger immediate refresh for other PCs
+            self.update_refresh_timing()
+            self._bring_to_front()
             return
 
     def populate_list(self):
@@ -896,16 +981,55 @@ class AlertDisplay(QWidget):
         if self.snooze_until and datetime.now() < self.snooze_until:
             return
         
-        # Toggle the color of flashing (Active) items
-        for item in self.flashing_items:
-            if self.flashing_on:
-                item.setForeground(0, Qt.red)
-            else:
-                item.setForeground(0, Qt.white)
         self.flashing_on = not self.flashing_on
+        
+        # Flash main background during active/missed alerts FIRST
+        if self.background_flashing:
+            self.update_flashing_background()
+        
+        # THEN update flashing items after background colors are set
+        for item in self.flashing_items:
+            if self.background_flashing:
+                # When background is flashing, make Active items stand out
+                if self.flashing_on:
+                    # Red background phase - make Active items white for visibility
+                    item.setForeground(0, QColor(255, 255, 255))  # White text
+                else:
+                    # White background phase - use original red color
+                    item.setForeground(0, QColor(255, 0, 0))  # Bright red
+            else:
+                # Normal item flashing when no background flash - use original colors
+                if self.flashing_on:
+                    item.setForeground(0, Qt.red)
+                else:
+                    item.setForeground(0, Qt.white)
         
         # Also check sound on every flash
         self.check_and_play_sound()
+    
+    def update_flashing_background(self):
+        """Update only the tree widget background and text colors for flashing alert effect"""
+        # Determine background and text colors based on flash state
+        if self.flashing_on:
+            # Red background phase - only for tree widget
+            tree_bg_color = "#ff0000"  # Red background
+            tree_text_color = "white"  # White text on red
+        else:
+            # White background phase - only for tree widget
+            tree_bg_color = "white" 
+            tree_text_color = "black"   # Black text on white
+        
+        # Apply flashing background stylesheet - ONLY to tree widget, leave interface normal
+        self.tree_widget.setStyleSheet(f"""
+            QTreeWidget {{
+                background-color: {tree_bg_color};
+                color: {tree_text_color};
+                border: 1px solid #ccc;
+            }}
+        """)
+        
+        # Also update all tree items to have proper colors
+        self.update_all_tree_item_colors(tree_text_color)
 
     def snooze_alerts(self):
         from PyQt5.QtWidgets import QInputDialog, QMessageBox
@@ -1027,6 +1151,92 @@ class AlertDisplay(QWidget):
             base = text[2:] if text.startswith(('+ ', '− ')) else text
             item.setText(0, f"+ {base}")
 
+
+    def _bring_to_front(self):
+        """Helper to bring window to front and focus."""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def update_all_tree_item_colors(self, base_text_color):
+        """Update all tree item colors to work with the current background"""
+        # Define colors based on current background
+        if base_text_color == "white":
+            # Red background - use white/light colors for visibility
+            open_color = QColor(200, 200, 255)      # Light blue
+            active_color = QColor(255, 255, 255)    # White 
+            missed_color = QColor(255, 200, 200)    # Light red/pink
+            ack_color = QColor(200, 255, 200)       # Light green
+            ack_late_color = QColor(255, 255, 150)  # Light yellow
+            group_color_default = QColor(0, 0, 0)   # Black for group headers during alerts
+        else:
+            # White background - use original colors
+            open_color = QColor(38, 132, 255)       # Jira blue
+            active_color = QColor(255, 0, 0)        # Red
+            missed_color = QColor(139, 0, 0)        # DarkRed
+            ack_color = QColor(0, 200, 0)           # Green
+            ack_late_color = QColor(255, 140, 0)    # Orange
+            group_color_default = QColor(38, 132, 255)  # Blue default for normal state
+        
+        # Update all items in the tree
+        for i in range(self.tree_widget.topLevelItemCount()):
+            group = self.tree_widget.topLevelItem(i)
+            
+            # Determine group header color based on its contents (highest priority status)
+            group_color = group_color_default  # Default
+            has_active = False
+            has_missed = False
+            has_ack_late = False
+            has_ack = False
+            has_open = False
+            
+            # Check what types of manifests this group contains
+            for j in range(group.childCount()):
+                child = group.child(j)
+                child_text = child.text(0)
+                
+                if "- Active" in child_text:
+                    has_active = True
+                elif "- Missed" in child_text and "Acknowledged" not in child_text:
+                    has_missed = True
+                elif "- Acknowledged Late" in child_text:
+                    has_ack_late = True
+                elif "- Acknowledged" in child_text:
+                    has_ack = True
+                elif "- Open" in child_text:
+                    has_open = True
+            
+            # Set group color by priority: Active > Missed > Ack Late > Ack > Open
+            if has_active:
+                group_color = active_color if base_text_color != "white" else group_color_default
+            elif has_missed:
+                group_color = missed_color if base_text_color != "white" else group_color_default
+            elif has_ack_late:
+                group_color = ack_late_color if base_text_color != "white" else group_color_default
+            elif has_ack:
+                group_color = ack_color if base_text_color != "white" else group_color_default
+            elif has_open:
+                group_color = open_color if base_text_color != "white" else group_color_default
+            
+            group.setForeground(0, group_color)
+            
+            # Update all children in this group
+            for j in range(group.childCount()):
+                child = group.child(j)
+                child_text = child.text(0)
+                
+                # Set appropriate color based on status
+                if "- Open" in child_text:
+                    child.setForeground(0, open_color)
+                elif "- Active" in child_text:
+                    # Set Active items color - flashing logic will override during flash cycles
+                    child.setForeground(0, active_color)
+                elif "- Missed" in child_text and "Acknowledged" not in child_text:
+                    child.setForeground(0, missed_color)
+                elif "- Acknowledged Late" in child_text:
+                    child.setForeground(0, ack_late_color)
+                elif "- Acknowledged" in child_text:
+                    child.setForeground(0, ack_color)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

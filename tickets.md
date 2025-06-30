@@ -237,6 +237,121 @@ Modern UI framework upgrade with enhanced visual design for warehouse environmen
 
 ---
 
+## 🆕 NEW TICKET: Configurable Data Location Settings
+
+## Ticket 11: Data Storage Location Configuration ⏳
+**Status:** New Feature Request
+**Priority:** High (Enables multi-PC and cloud deployments)
+
+**Description:**
+Add a settings interface to configure where the application stores its data files (`config.json` and `acknowledgments.json`). This enables flexible deployment options including local storage, network drives, and cloud synchronization via Google Drive Desktop.
+
+**Feature Requirements:**
+1. **Settings UI Access:**
+   - Add settings icon/button in main application window
+   - Accessible from system tray context menu
+   - Clear visual indicator for settings access
+
+2. **Folder Browser Interface:**
+   - Native Windows folder selection dialog
+   - Show current data location
+   - Validate selected path is writable
+   - Preview expected file locations
+
+3. **Storage Location Options:**
+   - **Local Storage**: `C:\manifest_data\` (default)
+   - **Google Drive**: `G:\My Drive\manifest_data\` (via Google Drive Desktop)
+   - **Network Drives**: `\\server\share\manifest_data\`
+   - **Custom Paths**: Any user-specified Windows folder
+
+4. **Settings Persistence:**
+   - Store location preference in Windows registry or local settings file
+   - Remember choice across application restarts
+   - Fallback to default location if path becomes unavailable
+
+5. **File Management:**
+   - Automatically create folder structure if needed
+   - Copy existing data files to new location on change
+   - Validate required files exist in selected location
+   - Create default files if missing
+
+**Acceptance Test:**
+- User can click settings icon to open folder browser
+- Selected folder persists across application restarts
+- Application correctly reads/writes to chosen location
+- Works with local folders, network drives, and Google Drive Desktop paths
+- Multiple PCs can share the same data location for synchronized operations
+
+**Implementation Benefits:**
+- **Multi-PC Deployment**: Multiple warehouse PCs sharing same config/logs
+- **Cloud Backup**: Automatic backup via Google Drive Desktop synchronization
+- **Centralized Management**: IT can update manifest schedules from any location
+- **Data Portability**: Easy migration between systems
+- **Disaster Recovery**: Data preserved in cloud storage
+
+**Technical Considerations:**
+- Use `QFileDialog.getExistingDirectory()` for folder selection
+- Store setting in `QSettings` (Windows registry) or `settings.json`
+- Modify `data_manager.py` to use configurable paths
+- Add path validation and error handling
+- Support UNC paths for network drives
+- Handle Google Drive Desktop sync conflicts gracefully
+
+**Example Use Cases:**
+1. **Warehouse Setup**: IT sets `G:\My Drive\manifest_data\` for cloud sync
+2. **Multi-PC Operation**: All warehouse PCs point to same network folder
+3. **Remote Management**: Manager updates schedules from office, syncs to warehouse
+4. **Backup Strategy**: Critical data automatically backed up to Google Drive
+
+---
+
+## 🆕 NEW TICKET: Real-Time Multi-PC Synchronization
+
+## Ticket 12: Adaptive Refresh for Multi-PC Deployments ✅
+**Status:** COMPLETED
+**Priority:** High (Enterprise multi-PC deployment critical)
+
+**Description:**
+Implement adaptive refresh rates to enable real-time synchronization of acknowledgments across multiple PCs accessing shared storage (Google Drive, network drives, etc.).
+
+**Problem Solved:**
+- Previously: All PCs refreshed acknowledgments every 30 seconds, causing up to 30-second delays before other users saw acknowledgments
+- Solution: Dynamic refresh timing based on alert status for immediate multi-PC synchronization
+
+**Implementation:**
+1. **Adaptive Refresh Timing:**
+   - **Fast Mode (5 seconds)**: During active/missed alerts for real-time sync
+   - **Normal Mode (30 seconds)**: When no alerts active to preserve system resources
+   - Automatic switching based on current alert status
+
+2. **File Change Detection:**
+   - Monitor `acknowledgments.json` modification timestamp
+   - Detect changes made by other PCs accessing shared storage
+   - Rebuild manifest list only when external changes detected
+   - Silent failure handling to maintain system stability
+
+3. **Immediate Response Triggers:**
+   - When user acknowledges a manifest, immediately switch to fast refresh mode
+   - Other PCs detect changes within 5 seconds instead of up to 30 seconds
+   - Automatic return to normal refresh when alerts resolved
+
+**Multi-PC Deployment Benefits:**
+- **Real-Time Updates**: User acknowledgments appear on all PCs within 5-10 seconds
+- **Resource Efficient**: Normal 30-second refresh when no alerts active
+- **Enterprise Ready**: Supports Google Drive Desktop, network drives, shared folders
+- **Zero Configuration**: Automatic detection of shared storage scenarios
+
+**Technical Details:**
+- `update_refresh_timing()`: Dynamically adjusts timer intervals
+- `check_acknowledgment_changes()`: File modification monitoring
+- Preserves all existing functionality while adding multi-PC awareness
+- Compatible with existing Google Drive/network drive deployments
+
+**Status:**
+✅ **COMPLETED** - Real-time multi-PC synchronization implemented and tested.
+
+---
+
 ## 📊 PROJECT SUMMARY
 
 ### ✅ CORE FUNCTIONALITY COMPLETE
