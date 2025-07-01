@@ -37,3 +37,23 @@ INSTALL.bat
 ---
 
 **The application is designed for warehouse users who need a simple, reliable installation process with minimal technical knowledge required.**
+
+## For Google drive location: 
+
+Open the Shared Folder in Your Browser: 
+Click on the share link you received. 
+This will open the folder in the Google Drive web interface.
+
+Add a Shortcut to "My Drive":
+
+In the top right, next to the folder name, click the "Add shortcut to Drive" icon (an icon of a drive with a plus sign).
+
+A window will pop up allowing you to choose where to place the shortcut. Select "My Drive" and click "Add shortcut."
+
+Locate the Folder on Your Computer:
+
+Open your computer's File Explorer.
+
+Navigate to your Google Drive folder. This is typically a drive letter assigned by the Google Drive app (e.g., G:).
+
+Inside your Google Drive, you will find the shortcut you just created, which will open the shared folder. The path will look something like this: G:\My Drive\[Name of the shared folder].
