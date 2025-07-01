@@ -25,9 +25,10 @@
 The Manifest Alert System monitors scheduled manifest deliveries and provides visual and audio alerts when manifests become active or missed. The system automatically tracks acknowledgments across multiple computers for warehouse coordination.
 
 ### Alert Types
-1. **🟢 Open Manifests**: Scheduled but not yet active (green background)
+1. **� Open Manifests**: Scheduled but not yet active (blue background)
 2. **🔴 Active Manifests**: Current time matches scheduled time (red background, audio alerts)
 3. **🟠 Missed Manifests**: Past due and unacknowledged (orange background, urgent alerts)
+4. **🟢 Acknowledged Manifests**: Completed and marked as handled (green background)
 
 ### Window Behavior
 - **Always Visible**: Window stays on screen during alerts for maximum visibility
@@ -377,8 +378,6 @@ The Manifest Alert System provides professional, reliable manifest tracking with
 - **Flexible configuration** supporting local, network, and cloud storage
 - **Simple installation and updates** via one-click INSTALL.bat system
 
-For technical support or advanced configuration assistance, refer to the system administrator or IT department.
-
----
+For technical support or advanced configuration assistance, refer to Analytics.
 
 *Last Updated: July 1, 2025 - Version: Production Release*
