@@ -2,6 +2,8 @@
 REM =================================================================
 REM Manifest Alert System - ONE-CLICK INSTALLER & UPDATER
 REM Use this file for both fresh installation and updates
+REM Run this file in the folder where you want to install the application 
+REM Running C:\INSTALL.bat C: will create the folder C:\manifest_alerts
 REM =================================================================
 
 echo.
