@@ -151,6 +151,11 @@ class AlertDisplay(QWidget):
         self.refresh_timer.start(30000)  # Default 30 seconds
         self.current_date = datetime.now().date()
         
+        # Dedicated acknowledgment file monitor for ultra-fast sync
+        self.ack_monitor_timer = QTimer(self)
+        self.ack_monitor_timer.timeout.connect(self.check_acknowledgment_changes)
+        self.ack_monitor_timer.start(1000)  # Check every 1 second for acknowledgment changes
+        
         # Track refresh state for adaptive timing during multi-PC sync
         self.fast_refresh_active = False
         self.last_ack_check_time = None
@@ -598,8 +603,8 @@ class AlertDisplay(QWidget):
 
     def refresh_list(self):
         """Refresh data and adapt refresh rate for multi-PC synchronization"""
-        # Always check for acknowledgment changes from other PCs, regardless of current state
-        self.check_acknowledgment_changes()
+        # Note: Acknowledgment changes are now monitored by dedicated 1-second timer
+        # This method focuses on regular UI updates and timing adjustments
         
         # Update UI components
         self.check_and_play_sound()
@@ -676,18 +681,21 @@ class AlertDisplay(QWidget):
             if not "Acknowledged" in self.tree_widget.topLevelItem(i).child(j).text(0)
         )
         
-        # Determine if we should use fast refresh (5 seconds during alerts)
+        # Determine if we should use fast refresh
         should_fast_refresh = has_active_alerts
         
-        # Always ensure timer is running, even if state hasn't changed
-        # This fixes issues where timer might get stopped in certain conditions
+        # Adaptive acknowledgment monitoring - faster during alerts
         if should_fast_refresh:
-            # Fast refresh during active/missed alerts for real-time multi-PC sync
-            self.refresh_timer.start(5000)  # 5 seconds for real-time sync
+            # Ultra-fast acknowledgment checking during alerts
+            self.ack_monitor_timer.start(500)  # 0.5 seconds during alerts
+            # Ultra-fast refresh during active/missed alerts for real-time multi-PC sync
+            self.refresh_timer.start(2000)  # 2 seconds for near real-time sync
             self.fast_refresh_active = True
         else:
-            # Normal refresh when no alerts active - ALWAYS run timer in green mode
-            self.refresh_timer.start(30000)  # 30 seconds normal operation
+            # Normal acknowledgment checking in green mode
+            self.ack_monitor_timer.start(2000)  # 2 seconds in normal operation
+            # Faster refresh even in green mode for better acknowledgment sync
+            self.refresh_timer.start(10000)  # 10 seconds in normal operation
             self.fast_refresh_active = False
     def check_and_play_sound(self):
         # Skip alerts during snooze
@@ -778,6 +786,8 @@ class AlertDisplay(QWidget):
                 self.update_clock_and_countdown()
                 # Trigger immediate refresh for other PCs
                 self.update_refresh_timing()
+                # Force immediate acknowledgment check for ultra-fast sync
+                QTimer.singleShot(100, self.check_acknowledgment_changes)
                 # Ensure window remains visible and stays on top
                 self.show()
                 self.raise_()
@@ -813,6 +823,8 @@ class AlertDisplay(QWidget):
                 self.update_clock_and_countdown()
                 # Trigger immediate refresh for other PCs
                 self.update_refresh_timing()
+                # Force immediate acknowledgment check for ultra-fast sync
+                QTimer.singleShot(100, self.check_acknowledgment_changes)
                 self._bring_to_front()
             else:
                 QMessageBox.information(self, "No Reason", "Acknowledgment cancelled: reason required.")
@@ -828,6 +840,8 @@ class AlertDisplay(QWidget):
             self.update_clock_and_countdown()
             # Trigger immediate refresh for other PCs
             self.update_refresh_timing()
+            # Force immediate acknowledgment check for ultra-fast sync
+            QTimer.singleShot(100, self.check_acknowledgment_changes)
             self._bring_to_front()
             return
 
