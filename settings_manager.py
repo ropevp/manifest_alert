@@ -115,8 +115,12 @@ class SettingsDialog(QDialog):
         self.settings_manager = settings_manager
         self.setWindowTitle("Application Settings")
         self.setModal(True)
-        self.resize(600, 350)
+        self.resize(600, 400)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
+        # Ensure dialog stays on top and maintains focus
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, False)
         
         self.setup_ui()
         self.load_current_settings()
@@ -172,14 +176,21 @@ class SettingsDialog(QDialog):
         
         app_data_row = QHBoxLayout()
         self.app_data_path_edit = QLineEdit()
-        self.app_data_path_edit.setReadOnly(True)
+        self.app_data_path_edit.setPlaceholderText("Enter folder path or use Browse button")
+        self.app_data_path_edit.textChanged.connect(self.validate_path_realtime)
         app_data_row.addWidget(self.app_data_path_edit)
         
         self.app_data_browse_btn = QPushButton("Browse...")
         self.app_data_browse_btn.clicked.connect(self.browse_app_data_folder)
         app_data_row.addWidget(self.app_data_browse_btn)
         
+        # Path validation status label
+        self.path_status_label = QLabel("")
+        self.path_status_label.setFont(QFont('Segoe UI', 8))
+        self.path_status_label.setWordWrap(True)
+        
         app_data_group.addLayout(app_data_row)
+        app_data_group.addWidget(self.path_status_label)
         layout.addLayout(app_data_group)
         
         layout.addSpacing(20)
@@ -209,38 +220,101 @@ class SettingsDialog(QDialog):
         """Load current settings into the UI"""
         self.ack_name_edit.setText(self.settings_manager.get_ack_name())
         self.app_data_path_edit.setText(self.settings_manager.get_app_data_folder())
+        # Trigger initial path validation
+        self.validate_path_realtime()
     
     def browse_app_data_folder(self):
         """Browse for app data folder"""
-        current_path = self.app_data_path_edit.text()
-        folder = QFileDialog.getExistingDirectory(
-            self, 
-            "Select Application Data Folder", 
-            current_path if current_path else os.path.expanduser("~")
-        )
-        if folder:
-            self.app_data_path_edit.setText(folder)
+        current_path = self.app_data_path_edit.text().strip()
+        if not current_path:
+            current_path = os.path.expanduser("~")
+        
+        # Create file dialog with proper focus handling
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Select Application Data Folder")
+        dialog.setFileMode(QFileDialog.DirectoryOnly)
+        dialog.setOption(QFileDialog.ShowDirsOnly, True)
+        dialog.setDirectory(current_path)
+        
+        # Ensure dialog stays on top and maintains focus
+        dialog.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.Dialog)
+        dialog.activateWindow()
+        dialog.raise_()
+        
+        if dialog.exec_() == QFileDialog.Accepted:
+            selected_folders = dialog.selectedFiles()
+            if selected_folders:
+                folder = selected_folders[0]
+                self.app_data_path_edit.setText(folder)
+                self.validate_path_realtime()
+    
+    def validate_path_realtime(self):
+        """Real-time path validation as user types"""
+        path = self.app_data_path_edit.text().strip()
+        
+        if not path:
+            self.path_status_label.setText("")
+            self.path_status_label.setStyleSheet("")
+            return
+        
+        # Expand environment variables and relative paths
+        expanded_path = os.path.expandvars(os.path.expanduser(path))
+        
+        if os.path.exists(expanded_path):
+            if os.path.isdir(expanded_path):
+                # Test write access
+                test_file = os.path.join(expanded_path, 'test_write.tmp')
+                try:
+                    with open(test_file, 'w') as f:
+                        f.write('test')
+                    os.remove(test_file)
+                    self.path_status_label.setText("✅ Valid folder with write access")
+                    self.path_status_label.setStyleSheet("color: green; margin-left: 10px;")
+                except Exception:
+                    self.path_status_label.setText("❌ Folder exists but no write access")
+                    self.path_status_label.setStyleSheet("color: red; margin-left: 10px;")
+            else:
+                self.path_status_label.setText("❌ Path exists but is not a folder")
+                self.path_status_label.setStyleSheet("color: red; margin-left: 10px;")
+        else:
+            # Check if parent directory exists (for creation)
+            parent_dir = os.path.dirname(expanded_path)
+            if os.path.exists(parent_dir) and os.path.isdir(parent_dir):
+                self.path_status_label.setText("⚠️ Folder will be created (parent exists)")
+                self.path_status_label.setStyleSheet("color: orange; margin-left: 10px;")
+            else:
+                self.path_status_label.setText("❌ Invalid path or parent directory missing")
+                self.path_status_label.setStyleSheet("color: red; margin-left: 10px;")
     
     def reset_to_defaults(self):
         """Reset path to default values"""
         self.ack_name_edit.setText(self.settings_manager.default_settings['ack_name'])
         self.app_data_path_edit.setText(self.settings_manager.default_settings['app_data_folder'])
+        # Trigger path validation after reset
+        self.validate_path_realtime()
     
     def validate_paths(self):
         """Validate that the selected path is writable"""
         app_data_path = self.app_data_path_edit.text().strip()
         
+        if not app_data_path:
+            QMessageBox.warning(self, "Invalid Path", "Please enter a valid folder path.")
+            return False
+        
+        # Expand environment variables and relative paths
+        expanded_path = os.path.expandvars(os.path.expanduser(app_data_path))
+        
         # Check if path exists and is writable
-        if not os.path.exists(app_data_path):
+        if not os.path.exists(expanded_path):
             reply = QMessageBox.question(
                 self, 
                 "Create Folder?", 
-                f"Application data folder does not exist:\n{app_data_path}\n\nCreate it now?",
+                f"Application data folder does not exist:\n{expanded_path}\n\nCreate it now?",
                 QMessageBox.Yes | QMessageBox.No
             )
             if reply == QMessageBox.Yes:
                 try:
-                    os.makedirs(app_data_path, exist_ok=True)
+                    os.makedirs(expanded_path, exist_ok=True)
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Could not create application data folder:\n{e}")
                     return False
@@ -248,14 +322,18 @@ class SettingsDialog(QDialog):
                 return False
         
         # Test write access
-        test_file = os.path.join(app_data_path, 'test_write.tmp')
+        test_file = os.path.join(expanded_path, 'test_write.tmp')
         try:
             with open(test_file, 'w') as f:
                 f.write('test')
             os.remove(test_file)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Application data folder is not writable:\n{app_data_path}\n\n{e}")
+            QMessageBox.critical(self, "Error", f"Application data folder is not writable:\n{expanded_path}\n\n{e}")
             return False
+        
+        # Update the text field with the expanded path
+        if expanded_path != app_data_path:
+            self.app_data_path_edit.setText(expanded_path)
         
         return True
     
