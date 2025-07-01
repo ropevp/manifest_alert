@@ -13,3 +13,7 @@ backup/
 # Legacy paths (for backward compatibility)
 logs/acknowledgments.json
 data/config.json
+
+# User-specific data files
+data/
+settings.json
