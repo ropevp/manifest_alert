@@ -25,10 +25,9 @@
 The Manifest Alert System monitors scheduled manifest deliveries and provides visual and audio alerts when manifests become active or missed. The system automatically tracks acknowledgments across multiple computers for warehouse coordination.
 
 ### Alert Types
-1. **� Open Manifests**: Scheduled but not yet active (blue background)
+1. **🟢 Open Manifests**: Scheduled but not yet active (green background)
 2. **🔴 Active Manifests**: Current time matches scheduled time (red background, audio alerts)
 3. **🟠 Missed Manifests**: Past due and unacknowledged (orange background, urgent alerts)
-4. **🟢 Acknowledged Manifests**: Completed and marked as handled (green background)
 
 ### Window Behavior
 - **Always Visible**: Window stays on screen during alerts for maximum visibility
@@ -184,6 +183,21 @@ Professional text-to-speech announcements using Windows Zira voice:
 - **Volume**: Uses system volume settings
 - **File Location**: `resources/alert.wav`
 
+### Snooze Integration
+Professional audio management during snooze periods:
+
+#### Complete Audio Control
+- **Voice Announcements**: Stopped immediately when snooze activated
+- **Sound Alerts**: Stopped immediately when snooze activated
+- **Speech Timer**: Paused during entire snooze period
+- **Automatic Resume**: Both voice and sound alerts resume when snooze expires
+
+#### Smart Audio Behavior
+- **Unified Silence**: All audio systems respect snooze status
+- **No Interruptions**: Zero audio during snooze period regardless of alert changes
+- **Professional Operation**: Clean start/stop with no audio artifacts
+- **Status Awareness**: Audio system automatically detects snooze state
+
 ---
 
 ## 🛠️ Settings and Customization
@@ -225,21 +239,57 @@ Real-time validation with visual indicators:
 
 ---
 
+## 🖥️ System Tray Integration
+
+### Enhanced System Tray Menu
+Right-click the system tray icon for complete application control:
+
+#### Available Functions
+- **Bring to Front**: Restore window to foreground
+- **Reload Config**: Refresh configuration from disk
+- **Snooze Alerts**: Temporarily silence alerts (enabled only during active alerts)
+- **Toggle Fullscreen**: Switch between fullscreen and maximized modes
+- **Switch to Monitor**: Choose specific monitor from submenu
+- **Exit**: Close application completely
+
+#### Smart Monitor Selection
+When multiple monitors are connected:
+- **Dynamic Detection**: Automatically detects all available monitors
+- **Current Monitor**: Shows which monitor currently displays the window
+- **Direct Selection**: Click "Monitor 1", "Monitor 2", etc. to switch directly
+- **Single Monitor**: Shows "Single Monitor (disabled)" when only one display available
+
+#### Context-Aware Behavior
+- **Snooze Option**: Only enabled when alerts are active (Active/Missed manifests present)
+- **Menu Updates**: Automatically updates based on current alert status
+- **Professional Operation**: Full application control without window interaction
+
+---
+
 ## 🔄 Snooze and Silence Options
 
-### Snooze Functionality
-Temporarily silence alerts while keeping visual indicators:
+### Enhanced Snooze Functionality
+Temporarily silence alerts with complete control over window behavior:
 
 #### How to Snooze
-1. **Click "Snooze" Button**: Available during Active or Missed alerts
-2. **Select Duration**: Choose from 1-30 minutes
-3. **Confirmation**: Audio stops, window remains visible
+1. **Main Window**: Click "Snooze" button (visible during Active or Missed alerts)
+2. **System Tray**: Right-click tray icon → "Snooze Alerts" (context-aware)
+3. **Select Duration**: Choose from 1-30 minutes
+4. **Enhanced Control**: Window can now be minimized and moved during snooze
 
 #### Snooze Behavior
-- **Audio Silence**: Voice announcements and sound alerts stop
-- **Visual Maintained**: Window stays visible with color-coded manifests
-- **Automatic Resume**: Alerts resume automatically after snooze period
-- **Multi-Status**: Works for both Active and Missed manifests
+- **Complete Audio Silence**: Both sound alerts and voice announcements stop
+- **Normal Window Behavior**: During snooze, window can be minimized, moved, or resized
+- **Always-on-Top Disabled**: Window no longer forces itself to front during snooze
+- **Visual Indicators Maintained**: Alert colors and status remain visible when window is open
+- **Automatic Resume**: All alerts resume when snooze period expires
+- **Professional Control**: True break from alert pressure while maintaining visibility option
+
+#### Snooze Benefits
+- **User Control**: Window behaves like normal application during snooze
+- **Warehouse Friendly**: Can minimize window during breaks without losing alert status
+- **Complete Silence**: No audio interruptions during snooze period
+- **Auto-Resume**: Returns to normal alert behavior when snooze ends
 
 #### Snooze Durations
 - **Quick Options**: 1, 5, 10, 15 minutes
@@ -250,10 +300,27 @@ Temporarily silence alerts while keeping visual indicators:
 
 ## 🖥️ Multi-Monitor Support
 
-### Monitor Switching
-- **Switch Monitor Button**: Cycles application through all available displays
+### Enhanced Monitor Switching
+Multiple ways to switch between monitors for optimal warehouse display setup:
+
+#### Main Window Method
+- **Switch Monitor Button**: Cycles application through all available displays sequentially
 - **Full Screen Display**: Window appears completely on target monitor
-- **Automatic Detection**: Uses all connected monitors and displays
+- **State Preservation**: Maintains fullscreen/maximized state on new monitor
+
+#### System Tray Method (NEW)
+- **Right-click System Tray**: Access "Switch to Monitor" submenu
+- **Direct Selection**: Choose specific monitor ("Monitor 1", "Monitor 2", etc.)
+- **Current Monitor Indicator**: Shows which monitor currently displays the window
+- **Intelligent Detection**: Automatically detects all connected displays
+
+#### Monitor Management
+- **Dynamic Detection**: Automatically detects when monitors are connected/disconnected
+- **Professional Positioning**: Centers window on target monitor before applying state
+- **State Management**: Preserves fullscreen/maximized state during monitor switches
+- **Single Monitor Support**: Gracefully handles single-monitor setups
+
+### Optimal Setup
 - **Memory**: Remembers last used monitor position
 
 ### Optimal Setup
@@ -362,9 +429,19 @@ System automatically resets at midnight for fresh daily operation:
 
 ### Daily Operations
 1. **Morning Check**: Verify system running and configuration current
-2. **Acknowledgment Discipline**: Always provide clear, specific reasons
-3. **End-of-Day Review**: Check acknowledgment logs for completeness
-4. **Issue Reporting**: Document any system issues for IT resolution
+2. **Acknowledgment Discipline**: Always provide clear, specific reasons for missed manifests
+3. **System Tray Usage**: Use right-click system tray menu for quick access to functions
+4. **Snooze Management**: Use snooze feature appropriately for breaks while maintaining awareness
+5. **Monitor Setup**: Configure optimal monitor placement using enhanced switching options
+6. **End-of-Day Review**: Check acknowledgment logs for completeness
+7. **Issue Reporting**: Document any system issues for IT resolution
+
+### Enhanced Features Usage
+1. **System Tray Control**: Leverage system tray menu for efficient operation without window focus
+2. **Smart Snoozing**: Use snooze when appropriate - window can be minimized during breaks
+3. **Monitor Optimization**: Use direct monitor selection from system tray for multi-display setups
+4. **Audio Management**: Trust snooze system for complete audio silence during break periods
+5. **Professional Operation**: Maintain visual awareness even when audio is snoozed
 
 ---
 
@@ -374,10 +451,13 @@ The Manifest Alert System provides professional, reliable manifest tracking with
 - **Zero-maintenance operation** for continuous 24/7 warehouse use
 - **Ultra-fast synchronization** across multiple computers (0.5-2 second updates)
 - **Professional audio/visual alerts** optimized for warehouse environments
+- **Enhanced system tray integration** for complete remote control
+- **Smart snooze functionality** with professional window management
+- **Advanced multi-monitor support** with direct selection capabilities
 - **Comprehensive acknowledgment tracking** with user accountability
 - **Flexible configuration** supporting local, network, and cloud storage
 - **Simple installation and updates** via one-click INSTALL.bat system
 
 For technical support or advanced configuration assistance, refer to Analytics.
 
-*Last Updated: July 1, 2025 - Version: Production Release*
+*Last Updated: July 2, 2025 - Version: Production Release with Latest Enhancements*

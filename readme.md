@@ -49,11 +49,23 @@ YourFolder/
 ## ✅ Features
 
 - **🔥 Ultra-Fast Sync**: 0.5s acknowledgment updates across PCs
-- **🎙️ Voice Announcements**: Professional text-to-speech alerts
+- **🎙️ Voice Announcements**: Professional text-to-speech alerts with snooze integration
 - **👤 User Tracking**: Custom names and accountability logging
 - **🖥️ Multi-PC Support**: Share data via Google Drive or network folders
+- **🖱️ System Tray Control**: Complete application control from taskbar menu
+- **📺 Enhanced Display**: Larger fonts optimized for warehouse TV displays
+- **🔄 Smart Snooze**: Professional window management during break periods
+- **🖥️ Multi-Monitor**: Direct monitor selection with intelligent switching
 - **⚡ Professional UI**: Windows integration with taskbar and system tray
 - **🔄 Auto-Updates**: Simple update process preserves all settings
+
+## 🆕 Latest Enhancements (July 2025)
+
+- **📏 Enhanced Message Display**: 44% larger fonts for better warehouse visibility
+- **🖱️ Complete System Tray Menu**: Access all functions from taskbar
+- **🖥️ Smart Monitor Switching**: Direct monitor selection with current monitor indicator
+- **😴 Professional Snooze**: True window management relief during breaks
+- **🔇 Complete Audio Control**: Unified snooze handling for all audio systems
 
 ## 🆘 Troubleshooting
 
