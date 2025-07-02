@@ -775,17 +775,15 @@ class AlertDisplay(QWidget):
                         QMessageBox.warning(self, 'Log Error', f'Failed to log acknowledgment for {carrier}: {e}')
             
             if any_acked:
-                QMessageBox.information(self, 'Acknowledged', f'All Active/Missed manifests at {manifest_time} acknowledged.')
+                # Removed confirmation dialog to prevent fullscreen disruption
                 self.populate_list()
                 self.update_clock_and_countdown()
                 # Trigger immediate refresh for other PCs
                 self.update_refresh_timing()
                 # Force immediate acknowledgment check for ultra-fast sync
                 QTimer.singleShot(100, self.check_acknowledgment_changes)
-                # Ensure window remains visible and stays on top
-                self.show()
-                self.raise_()
-                self.activateWindow()
+                # Preserve window state after acknowledgment
+                self._preserve_window_state_after_ack()
             return
         text = selected.text(0)
         # Only children (manifests) are acknowledgeable
@@ -819,7 +817,7 @@ class AlertDisplay(QWidget):
                 self.update_refresh_timing()
                 # Force immediate acknowledgment check for ultra-fast sync
                 QTimer.singleShot(100, self.check_acknowledgment_changes)
-                self._bring_to_front()
+                self._preserve_window_state_after_ack()
             else:
                 QMessageBox.information(self, "No Reason", "Acknowledgment cancelled: reason required.")
             return
@@ -836,7 +834,7 @@ class AlertDisplay(QWidget):
             self.update_refresh_timing()
             # Force immediate acknowledgment check for ultra-fast sync
             QTimer.singleShot(100, self.check_acknowledgment_changes)
-            self._bring_to_front()
+            self._preserve_window_state_after_ack()
             return
 
     def populate_list(self):
@@ -1240,7 +1238,7 @@ class AlertDisplay(QWidget):
             self.setWindowState(Qt.WindowFullScreen)
             # Update icon to normal/restore symbol
             self.full_btn.setIcon(self.style().standardIcon(QStyle.SP_TitleBarNormalButton))
-        self.show()
+        # Don't use show() - it can disrupt window state
 
     def collapse_all(self):
         """Collapse all manifest groups in the tree"""
@@ -1255,10 +1253,8 @@ class AlertDisplay(QWidget):
         # For warehouse TV displays, don't minimize or hide the window
         # Just ignore the close event to prevent accidental closure
         event.ignore()
-        # Keep window visible and focused
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        # Preserve window state when preventing close
+        self._preserve_window_state_after_ack()
     
     def handle_item_expanded(self, item):
         """Update prefix when a group is expanded"""
@@ -1304,6 +1300,26 @@ class AlertDisplay(QWidget):
         # For now, just pass - this prevents the startup crash
         # TODO: Re-implement tray menu functionality if needed
         pass
+
+    def _preserve_window_state_after_ack(self):
+        """Preserve window state after acknowledgment without disrupting fullscreen mode"""
+        # Store current window state
+        current_state = self.windowState()
+        
+        # Preserve fullscreen or maximized state
+        if current_state & Qt.WindowFullScreen:
+            # Maintain fullscreen - don't use show() which breaks state
+            self.setWindowState(Qt.WindowFullScreen)
+            self.raise_()
+            self.activateWindow()
+        elif current_state & Qt.WindowMaximized:
+            # Maintain maximized state
+            self.setWindowState(Qt.WindowMaximized)
+            self.raise_()
+            self.activateWindow()
+        else:
+            # Normal state - use standard bring to front
+            self._bring_to_front()
 
     def update_all_tree_item_colors(self, base_text_color):
         """Update all tree item colors to work with the current background"""
