@@ -205,6 +205,10 @@ class AlertDisplay(QWidget):
         tray_icon.show()
 
     def speak_active_alert(self):
+        # Skip voice announcements during snooze
+        if self.snooze_until and datetime.now() < self.snooze_until:
+            return
+        
         # Analyze all alerting manifests to create a smart, consolidated announcement
         alerting_groups = []
         has_active = False
@@ -721,8 +725,8 @@ class AlertDisplay(QWidget):
                 if not self.sound.isFinished():
                     pass  # Already playing
                 else:
-                    self.sound.play()            # Start speech timer if not already running
-            if not self.speech_timer.isActive():
+                    self.sound.play()            # Start speech timer if not already running and not snoozed
+            if not self.speech_timer.isActive() and not (self.snooze_until and datetime.now() < self.snooze_until):
                 self.speech_timer.start(20000)  # every 20 seconds
                 self.speak_active_alert()  # speak immediately only when starting timer
         else:
@@ -1160,6 +1164,10 @@ class AlertDisplay(QWidget):
         if self.sound:
             self.sound.stop()
             self.sound = None
+        
+        # Stop speech timer during snooze
+        if self.speech_timer.isActive():
+            self.speech_timer.stop()
         # Keep window visible during snooze for warehouse TV display
         # Window stays visible but alerts are silenced
         # Inform user
@@ -1173,6 +1181,9 @@ class AlertDisplay(QWidget):
         self.show()
         self.populate_list()
         self.update_clock_and_countdown()
+        
+        # Restart speech and sound if there are still active alerts
+        self.check_and_play_sound()
         
         # Ensure always-on-top when coming out of snooze if alerts active
         # Only set flag if not already set to avoid window state issues
