@@ -184,25 +184,20 @@ class AlertDisplay(QWidget):
             try:
                 self.last_ack_check_time = os.path.getmtime(ack_path)
             except Exception:
-                self.last_ack_check_time = None        # System tray integration
+                self.last_ack_check_time = None        # System tray integration with enhanced menu
         from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
         icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
-        tray_icon = QSystemTrayIcon(
+        self.tray_icon = QSystemTrayIcon(
             QIcon(icon_path) if os.path.exists(icon_path) else self.windowIcon(), parent=self
         )
-        tray_icon.setToolTip("Manifest Alerts")
+        self.tray_icon.setToolTip("Manifest Alerts")
         
-        menu = QMenu()
-        show_action = QAction("Bring to Front", self)
-        exit_action = QAction("Exit", self)
-        menu.addAction(show_action)
-        menu.addSeparator()
-        menu.addAction(exit_action)
-        tray_icon.setContextMenu(menu)
-        show_action.triggered.connect(lambda: self._toggle_visibility())
-        exit_action.triggered.connect(lambda: tray_icon.hide() or QApplication.instance().quit())
-        tray_icon.activated.connect(lambda r: self._toggle_visibility() if r == QSystemTrayIcon.Trigger else None)
-        tray_icon.show()
+        # Create enhanced tray menu with all main functions
+        self.tray_menu = QMenu()
+        self._create_tray_menu()
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(lambda r: self._toggle_visibility() if r == QSystemTrayIcon.Trigger else None)
+        self.tray_icon.show()
 
     def speak_active_alert(self):
         # Analyze all alerting manifests to create a smart, consolidated announcement
@@ -357,7 +352,7 @@ class AlertDisplay(QWidget):
         self.populate_list()
         self.update_clock_and_countdown()
         
-        # Restore window visibility and state after reload
+        # Restore window visibility and state after reload - state-aware
         if was_visible:
             if current_state & Qt.WindowMaximized:
                 self.setWindowState(Qt.WindowMaximized)
@@ -366,9 +361,20 @@ class AlertDisplay(QWidget):
             else:
                 self.setWindowState(Qt.WindowNoState)
             
-            self.show()
-            self.raise_()
-            self.activateWindow()
+            # Use state-aware visibility restoration
+            if current_state & Qt.WindowFullScreen:
+                # Don't call show() in fullscreen
+                self.raise_()
+                self.activateWindow()
+            elif current_state & Qt.WindowMaximized:
+                # Don't call show() in maximized
+                self.raise_()
+                self.activateWindow()
+            else:
+                # Normal state - safe to show()
+                self.show()
+                self.raise_()
+                self.activateWindow()
         
         from PyQt5.QtWidgets import QMessageBox
         QMessageBox.information(self, "Config Reloaded", "Configuration reloaded from disk.")
@@ -407,7 +413,10 @@ class AlertDisplay(QWidget):
                 
                 # Ensure window is visible and active without disrupting state
                 if not self.isVisible():
-                    self.show()
+                    current_state = self.windowState()
+                    # Only call show() if not in fullscreen/maximized
+                    if not (current_state & Qt.WindowFullScreen) and not (current_state & Qt.WindowMaximized):
+                        self.show()
                 self.raise_()
                 self.activateWindow()
                 
@@ -501,9 +510,12 @@ class AlertDisplay(QWidget):
             
             # When snoozed, don't force window to front - allow user to minimize
             if not (self.snooze_until and datetime.now() < self.snooze_until):
-                # Only ensure visibility when NOT snoozed
+                # Only ensure visibility when NOT snoozed - use state-aware method
                 if self.isVisible(): 
-                    self.show()
+                    current_state = self.windowState()
+                    # Avoid show() in fullscreen/maximized modes
+                    if not (current_state & Qt.WindowFullScreen) and not (current_state & Qt.WindowMaximized):
+                        self.show()
                     self.raise_()
                     self.activateWindow()
             
@@ -643,7 +655,7 @@ class AlertDisplay(QWidget):
                         # Force window to be visible and properly positioned
                         self.setGeometry(current_pos.x(), current_pos.y(), current_size.width(), current_size.height())
                         
-                        # Restore exact window state
+                        # Restore exact window state first
                         if current_state & Qt.WindowMaximized:
                             self.setWindowState(Qt.WindowMaximized)
                         elif current_state & Qt.WindowFullScreen:
@@ -651,10 +663,20 @@ class AlertDisplay(QWidget):
                         else:
                             self.setWindowState(Qt.WindowNoState)
                         
-                        # Force window to be visible and focused
-                        self.show()
-                        self.raise_()
-                        self.activateWindow()
+                        # State-aware window visibility restoration
+                        if current_state & Qt.WindowFullScreen:
+                            # Don't call show() in fullscreen - it breaks the state
+                            self.raise_()
+                            self.activateWindow()
+                        elif current_state & Qt.WindowMaximized:
+                            # Don't call show() in maximized - it can cause issues
+                            self.raise_()
+                            self.activateWindow()
+                        else:
+                            # Normal state - safe to call show()
+                            self.show()
+                            self.raise_()
+                            self.activateWindow()
                         
                         # Extra assurance - force it to stay on top temporarily then remove
                         if was_active:
@@ -747,12 +769,16 @@ class AlertDisplay(QWidget):
             # If group has missed manifests, require a note
             reason = None
             if has_missed_manifests:
-                reason, ok = QInputDialog.getText(
-                    self, "Missed Group Reason", 
+                reason, ok = self._show_input_dialog_with_state_preservation(
+                    "Missed Group Reason", 
                     f"This group has missed manifests. Please enter reason for missed manifests at {manifest_time}:"
                 )
                 if not (ok and reason.strip()):
-                    QMessageBox.information(self, "No Reason", "Acknowledgment cancelled: reason required for missed manifests.")
+                    self._show_message_with_state_preservation(
+                        "information", 
+                        "No Reason", 
+                        "Acknowledgment cancelled: reason required for missed manifests."
+                    )
                     return
                 reason = reason.strip()
             
@@ -799,12 +825,19 @@ class AlertDisplay(QWidget):
         status = parts[1] if len(parts) > 1 else ''
 
         if "Open" in text:
-            QMessageBox.information(self, "Cannot Acknowledge", "You cannot acknowledge an 'Open' manifest. Wait until it is Active or Missed.")
+            self._show_message_with_state_preservation(
+                "information", 
+                "Cannot Acknowledge", 
+                "You cannot acknowledge an 'Open' manifest. Wait until it is Active or Missed."
+            )
             return
 
         if "Missed" in text:
-            # Prompt for missed reason
-            reason, ok = QInputDialog.getText(self, "Missed Reason", "Please enter reason for missed manifest:")
+            # Prompt for missed reason with state preservation
+            reason, ok = self._show_input_dialog_with_state_preservation(
+                "Missed Reason", 
+                "Please enter reason for missed manifest:"
+            )
             if ok and reason.strip():
                 try:
                     from logger import log_acknowledgment
@@ -819,7 +852,11 @@ class AlertDisplay(QWidget):
                 QTimer.singleShot(100, self.check_acknowledgment_changes)
                 self._preserve_window_state_after_ack()
             else:
-                QMessageBox.information(self, "No Reason", "Acknowledgment cancelled: reason required.")
+                self._show_message_with_state_preservation(
+                    "information", 
+                    "No Reason", 
+                    "Acknowledgment cancelled: reason required."
+                )
             return
 
         if "Active" in text or "Open" in text:
@@ -1033,6 +1070,9 @@ class AlertDisplay(QWidget):
             self.snooze_btn.show()
         else:
             self.snooze_btn.hide()
+        
+        # Update tray menu to reflect current alert state
+        self.update_tray_menu()
     
     def update_combined_message(self):
         """Update combined message bar with either speech ticker or countdown message"""
@@ -1143,8 +1183,12 @@ class AlertDisplay(QWidget):
 
     def snooze_alerts(self):
         from PyQt5.QtWidgets import QInputDialog, QMessageBox
-        # Ask for snooze duration in minutes
-        duration, ok = QInputDialog.getInt(self, "Snooze Alerts", "Snooze duration (minutes):", value=2, min=1, max=30)
+        # Ask for snooze duration in minutes with state preservation
+        duration, ok = self._show_int_dialog_with_state_preservation(
+            "Snooze Alerts", 
+            "Snooze duration (minutes):", 
+            value=2, min_val=1, max_val=30
+        )
         if not ok:
             return        # Calculate end time
         self.snooze_until = datetime.now() + timedelta(minutes=duration)
@@ -1162,15 +1206,19 @@ class AlertDisplay(QWidget):
         if self.windowFlags() & Qt.WindowStaysOnTopHint:
             self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
         
-        # Inform user
-        QMessageBox.information(self, "Snoozed", f"Alerts snoozed for {duration} minutes. Window can now be minimized.")
+        # Inform user with state preservation
+        self._show_message_with_state_preservation(
+            "information", 
+            "Snoozed", 
+            f"Alerts snoozed for {duration} minutes. Window can now be minimized."
+        )
         # Schedule end of snooze
         QTimer.singleShot(duration * 60 * 1000, self.end_snooze)
 
     def end_snooze(self):
-        # Clear snooze and show window
+        # Clear snooze and restore window visibility state-aware
         self.snooze_until = None
-        self.show()
+        self._ensure_window_visibility()  # Use centralized state-aware method
         self.populate_list()
         self.update_clock_and_countdown()
         
@@ -1290,36 +1338,224 @@ class AlertDisplay(QWidget):
         # Don't force window to front if alerts are snoozed
         if self.snooze_until and datetime.now() < self.snooze_until:
             return
-            
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        
+        # Use the centralized state-aware visibility method
+        self._ensure_window_visibility()
 
     def update_tray_menu(self):
         """Update tray menu to reflect current state (e.g., enable/disable snooze)"""
-        # For now, just pass - this prevents the startup crash
-        # TODO: Re-implement tray menu functionality if needed
-        pass
+        # Recreate the tray menu to reflect current application state
+        if hasattr(self, 'tray_menu'):
+            self._create_tray_menu()
+
+    def _create_tray_menu(self):
+        """Create enhanced system tray menu with all main application functions"""
+        from PyQt5.QtWidgets import QAction, QMenu
+        self.tray_menu.clear()
+        
+        # Bring to Front
+        show_action = QAction("Bring to Front", self)
+        show_action.triggered.connect(lambda: self._toggle_visibility())
+        self.tray_menu.addAction(show_action)
+        
+        self.tray_menu.addSeparator()
+        
+        # Reload Config
+        reload_action = QAction("Reload Config", self)
+        reload_action.triggered.connect(self.reload_config)
+        self.tray_menu.addAction(reload_action)
+        
+        # Snooze Alerts (context-aware enable/disable)
+        snooze_action = QAction("Snooze Alerts", self)
+        snooze_action.triggered.connect(self.snooze_alerts)
+        # Enable snooze only when there are active alerts
+        snooze_action.setEnabled(bool(self.flashing_items))
+        self.tray_menu.addAction(snooze_action)
+        
+        # Toggle Fullscreen
+        fullscreen_action = QAction("Toggle Fullscreen", self)
+        fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        self.tray_menu.addAction(fullscreen_action)
+        
+        # Monitor switching with smart submenu
+        self._create_monitor_submenu()
+        
+        self.tray_menu.addSeparator()
+        
+        # Exit
+        exit_action = QAction("Exit Application", self)
+        exit_action.triggered.connect(lambda: self.tray_icon.hide() or QApplication.instance().quit())
+        self.tray_menu.addAction(exit_action)
+
+    def _create_monitor_submenu(self):
+        """Create monitor switching submenu with smart detection"""
+        from PyQt5.QtWidgets import QApplication, QAction, QMenu
+        screens = QApplication.screens()
+        
+        if len(screens) <= 1:
+            # Single monitor - show disabled option
+            single_monitor_action = QAction("Single Monitor (disabled)", self)
+            single_monitor_action.setEnabled(False)
+            self.tray_menu.addAction(single_monitor_action)
+        else:
+            # Multiple monitors - create submenu
+            monitor_menu = QMenu("Switch to Monitor", self)
+            
+            # Determine current monitor
+            current_screen_idx = 0
+            fg = self.frameGeometry()
+            center = fg.center()
+            for i, screen in enumerate(screens):
+                if screen.geometry().contains(center):
+                    current_screen_idx = i
+                    break
+            
+            # Add menu items for each monitor
+            for i, screen in enumerate(screens):
+                monitor_text = f"Monitor {i + 1}"
+                if i == current_screen_idx:
+                    monitor_text += " (Current)"
+                
+                monitor_action = QAction(monitor_text, self)
+                monitor_action.triggered.connect(lambda checked, idx=i: self._switch_to_monitor(idx))
+                monitor_menu.addAction(monitor_action)
+            
+            self.tray_menu.addMenu(monitor_menu)
+
+    def _switch_to_monitor(self, monitor_index):
+        """Switch window to specific monitor by index"""
+        from PyQt5.QtWidgets import QApplication
+        screens = QApplication.screens()
+        
+        if 0 <= monitor_index < len(screens):
+            target_screen = screens[monitor_index]
+            
+            # Remember current state
+            was_fullscreen = bool(self.windowState() & Qt.WindowFullScreen)
+            was_maximized = bool(self.windowState() & Qt.WindowMaximized)
+            
+            # Move to target screen center
+            screen_rect = target_screen.availableGeometry()
+            self.move(screen_rect.center() - self.rect().center())
+            
+            # Restore window state on new monitor
+            if was_fullscreen:
+                self.setWindowState(Qt.WindowFullScreen)
+            elif was_maximized:
+                self.setWindowState(Qt.WindowMaximized)
+            
+            # Refresh tray menu to update current monitor indicator
+            self._create_tray_menu()
 
     def _preserve_window_state_after_ack(self):
         """Preserve window state after acknowledgment without disrupting fullscreen mode"""
-        # Store current window state
+        self._ensure_window_visibility()
+
+    def _ensure_window_visibility(self):
+        """Ensure window is visible and focused without disrupting fullscreen/maximized state"""
         current_state = self.windowState()
         
-        # Preserve fullscreen or maximized state
+        # State-aware window visibility - NEVER use show() in fullscreen/maximized
         if current_state & Qt.WindowFullScreen:
-            # Maintain fullscreen - don't use show() which breaks state
+            # In fullscreen - never call show() as it breaks fullscreen mode
+            self.raise_()
+            self.activateWindow()
+        elif current_state & Qt.WindowMaximized:
+            # In maximized - never call show() as it can cause window shift
+            self.raise_()
+            self.activateWindow()
+        else:
+            # Normal window state - safe to use show()
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+    def _show_input_dialog_with_state_preservation(self, title, prompt):
+        """Show input dialog while preserving parent window state"""
+        from PyQt5.QtWidgets import QInputDialog
+        
+        # Store current window state before showing dialog
+        current_state = self.windowState()
+        current_flags = self.windowFlags()
+        
+        # Show the input dialog
+        text, ok = QInputDialog.getText(self, title, prompt)
+        
+        # Restore window state after dialog closes
+        if current_state & Qt.WindowFullScreen:
+            # Restore fullscreen mode
             self.setWindowState(Qt.WindowFullScreen)
             self.raise_()
             self.activateWindow()
         elif current_state & Qt.WindowMaximized:
-            # Maintain maximized state
+            # Restore maximized mode  
             self.setWindowState(Qt.WindowMaximized)
             self.raise_()
             self.activateWindow()
         else:
-            # Normal state - use standard bring to front
-            self._bring_to_front()
+            # Normal state - use standard visibility
+            self._ensure_window_visibility()
+        
+        return text, ok
+
+    def _show_int_dialog_with_state_preservation(self, title, prompt, value=0, min_val=0, max_val=100):
+        """Show integer input dialog while preserving parent window state"""
+        from PyQt5.QtWidgets import QInputDialog
+        
+        # Store current window state before showing dialog
+        current_state = self.windowState()
+        current_flags = self.windowFlags()
+        
+        # Show the integer input dialog
+        number, ok = QInputDialog.getInt(self, title, prompt, value=value, min=min_val, max=max_val)
+        
+        # Restore window state after dialog closes
+        if current_state & Qt.WindowFullScreen:
+            # Restore fullscreen mode
+            self.setWindowState(Qt.WindowFullScreen)
+            self.raise_()
+            self.activateWindow()
+        elif current_state & Qt.WindowMaximized:
+            # Restore maximized mode  
+            self.setWindowState(Qt.WindowMaximized)
+            self.raise_()
+            self.activateWindow()
+        else:
+            # Normal state - use standard visibility
+            self._ensure_window_visibility()
+        
+        return number, ok
+
+    def _show_message_with_state_preservation(self, icon, title, text):
+        """Show message box while preserving parent window state"""
+        from PyQt5.QtWidgets import QMessageBox
+        
+        # Store current window state before showing dialog
+        current_state = self.windowState()
+        current_flags = self.windowFlags()
+        
+        # Show the message box
+        if icon == "information":
+            QMessageBox.information(self, title, text)
+        elif icon == "warning":
+            QMessageBox.warning(self, title, text)
+        elif icon == "critical":
+            QMessageBox.critical(self, title, text)
+        
+        # Restore window state after dialog closes
+        if current_state & Qt.WindowFullScreen:
+            # Restore fullscreen mode
+            self.setWindowState(Qt.WindowFullScreen)
+            self.raise_()
+            self.activateWindow()
+        elif current_state & Qt.WindowMaximized:
+            # Restore maximized mode  
+            self.setWindowState(Qt.WindowMaximized)
+            self.raise_()
+            self.activateWindow()
+        else:
+            # Normal state - use standard visibility
+            self._ensure_window_visibility()
 
     def update_all_tree_item_colors(self, base_text_color):
         """Update all tree item colors to work with the current background"""

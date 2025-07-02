@@ -97,7 +97,6 @@ class SettingsManager:
         custom_name = self.get_ack_name()
         return custom_name if custom_name else getpass.getuser()
 
-
 # Global settings manager instance
 _settings_manager = None
 

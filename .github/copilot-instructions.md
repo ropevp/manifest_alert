@@ -19,7 +19,42 @@ This is a **warehouse-grade PyQt5 desktop application** for shipping manifest al
 - All launchers (`launch_*.bat`) must use virtual environment Python paths
 
 ### Window Management Anti-Patterns
-**⚠️ NEVER call `show()` after `setWindowFlag()` operations** - this causes unwanted minimization:
+**⚠️ CRITICAL: NEVER call `show()` when window is in fullscreen or maximized state** - this causes unwanted minimization and window shifting:
+```python
+# ❌ WRONG - causes window to minimize/shift in fullscreen/maximized
+current_state = self.windowState()
+self.show()  # This breaks fullscreen/maximized window state
+
+# ✅ CORRECT - state-aware window operations
+def _ensure_window_visibility(self):
+    current_state = self.windowState()
+    if current_state & Qt.WindowFullScreen or current_state & Qt.WindowMaximized:
+        # NEVER call show() - only raise and activate
+        self.raise_()
+        self.activateWindow()
+    else:
+        # Normal state - safe to use show()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+```
+
+**⚠️ Modal Dialog Anti-Pattern**: Modal dialogs disrupt window state - always preserve and restore:
+```python
+# ❌ WRONG - dialog disrupts parent window state
+text, ok = QInputDialog.getText(self, "Title", "Prompt")
+
+# ✅ CORRECT - preserve window state around dialogs
+def _show_input_dialog_with_state_preservation(self, title, prompt):
+    current_state = self.windowState()
+    text, ok = QInputDialog.getText(self, title, prompt)
+    # Restore window state after dialog
+    if current_state & Qt.WindowFullScreen:
+        self.setWindowState(Qt.WindowFullScreen)
+    return text, ok
+```
+
+**⚠️ Additional anti-pattern**: Never call `show()` after `setWindowFlag()` operations:
 ```python
 # ❌ WRONG - causes window to minimize
 self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
@@ -74,9 +109,11 @@ Settings use **dual-location strategy**:
 ## 🎯 Component Integration Points
 
 ### System Tray ↔ Main Window
-- Tray menu dynamically enables/disables based on alert status
-- Monitor switching creates dynamic submenus based on `QApplication.screens()`
-- All main window functions accessible via tray context menu
+- **Enhanced tray menu** with complete application control (Ticket 19 implementation)
+- **Dynamic menu updates**: Snooze enabled only when alerts active, monitor switching with current indicator
+- **Smart monitor switching**: Creates dynamic submenus based on `QApplication.screens()`
+- **Context-aware behavior**: Menu items enable/disable based on application state
+- All main window functions accessible via right-click tray context menu
 
 ### Snooze System ↔ Audio/Visual
 - Snooze affects **both** WAV alerts (`sound_handler.py`) and TTS announcements (`pyttsx3`)
