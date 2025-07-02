@@ -205,10 +205,6 @@ class AlertDisplay(QWidget):
         tray_icon.show()
 
     def speak_active_alert(self):
-        # Skip voice announcements during snooze
-        if self.snooze_until and datetime.now() < self.snooze_until:
-            return
-        
         # Analyze all alerting manifests to create a smart, consolidated announcement
         alerting_groups = []
         has_active = False
@@ -389,12 +385,7 @@ class AlertDisplay(QWidget):
         
         # Update status band and background based on most urgent status
         self.update_visual_alerts()# If any Active or Missed exists in tree, focus group and maximize
-        any_alerting = any(
-            ("Active" in self.tree_widget.topLevelItem(i).child(j).text(0) or
-             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0))
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-        )
+        any_alerting = self.has_active_alerts()
         if any_alerting:
             # Collapse all groups except the alerting ones, bring window to front
             for i in range(self.tree_widget.topLevelItemCount()):
@@ -404,7 +395,9 @@ class AlertDisplay(QWidget):
                     for j in range(group.childCount())
                 )
                 group.setExpanded(has_alerting)
-            if not (self.snooze_until and datetime.now() < self.snooze_until):
+            
+            # Only force window state if alerts are NOT snoozed
+            if self.has_unsnooze_alerts():
                 # Preserve current window state while ensuring visibility
                 current_state = self.windowState()
                 
@@ -499,18 +492,20 @@ class AlertDisplay(QWidget):
         else:
             self.set_countdown_text("")
         
-        # Always disable always-on-top when no alerts (but preserve window visibility)
-        if not any_alerting:
+        # Disable always-on-top when no alerts OR when snoozed (but preserve window visibility)
+        if not any_alerting or (self.snooze_until and datetime.now() < self.snooze_until):
             # Only change the flag if it's currently set to avoid unnecessary updates
             if self.windowFlags() & Qt.WindowStaysOnTopHint:
                 self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
                 # Don't call show() after setting flags - preserve current state
             
-            # Ensure window stays visible regardless
-            if self.isVisible(): 
-                self.show()
-                self.raise_()
-                self.activateWindow()
+            # When snoozed, don't force window to front - allow user to minimize
+            if not (self.snooze_until and datetime.now() < self.snooze_until):
+                # Only ensure visibility when NOT snoozed
+                if self.isVisible(): 
+                    self.show()
+                    self.raise_()
+                    self.activateWindow()
             
         # Check sound without altering group expansion (retain manual state)
         self.check_and_play_sound()
@@ -708,12 +703,7 @@ class AlertDisplay(QWidget):
         from PyQt5.QtMultimedia import QSound
         import os
         sound_path = os.path.join(os.path.dirname(__file__), 'resources', 'alert.wav')
-        any_alerting = any(
-            ("Active" in self.tree_widget.topLevelItem(i).child(j).text(0) or 
-             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0))
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-        )
+        any_alerting = self.has_active_alerts()
         if any_alerting:
             if self.sound is None:
                 if os.path.exists(sound_path):
@@ -725,8 +715,8 @@ class AlertDisplay(QWidget):
                 if not self.sound.isFinished():
                     pass  # Already playing
                 else:
-                    self.sound.play()            # Start speech timer if not already running and not snoozed
-            if not self.speech_timer.isActive() and not (self.snooze_until and datetime.now() < self.snooze_until):
+                    self.sound.play()            # Start speech timer if not already running
+            if not self.speech_timer.isActive():
                 self.speech_timer.start(20000)  # every 20 seconds
                 self.speak_active_alert()  # speak immediately only when starting timer
         else:
@@ -1160,6 +1150,7 @@ class AlertDisplay(QWidget):
         if not ok:
             return        # Calculate end time
         self.snooze_until = datetime.now() + timedelta(minutes=duration)
+        
         # Stop any playing sound
         if self.sound:
             self.sound.stop()
@@ -1168,10 +1159,13 @@ class AlertDisplay(QWidget):
         # Stop speech timer during snooze
         if self.speech_timer.isActive():
             self.speech_timer.stop()
-        # Keep window visible during snooze for warehouse TV display
-        # Window stays visible but alerts are silenced
+        
+        # Remove always-on-top flag during snooze so window can be minimized
+        if self.windowFlags() & Qt.WindowStaysOnTopHint:
+            self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
+        
         # Inform user
-        QMessageBox.information(self, "Snoozed", f"Alerts snoozed for {duration} minutes. Window will remain visible.")
+        QMessageBox.information(self, "Snoozed", f"Alerts snoozed for {duration} minutes. Window can now be minimized.")
         # Schedule end of snooze
         QTimer.singleShot(duration * 60 * 1000, self.end_snooze)
 
@@ -1181,9 +1175,6 @@ class AlertDisplay(QWidget):
         self.show()
         self.populate_list()
         self.update_clock_and_countdown()
-        
-        # Restart speech and sound if there are still active alerts
-        self.check_and_play_sound()
         
         # Ensure always-on-top when coming out of snooze if alerts active
         # Only set flag if not already set to avoid window state issues
@@ -1285,11 +1276,34 @@ class AlertDisplay(QWidget):
             item.setText(0, f"+ {base}")
 
 
+    def has_active_alerts(self):
+        """Helper method to check if there are any active or missed alerts"""
+        return any(
+            ("Active" in self.tree_widget.topLevelItem(i).child(j).text(0) or
+             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0))
+            for i in range(self.tree_widget.topLevelItemCount())
+            for j in range(self.tree_widget.topLevelItem(i).childCount())
+        )
+    
+    def has_unsnooze_alerts(self):
+        """Helper method to check if there are active alerts that are NOT snoozed"""
+        return self.has_active_alerts() and not (self.snooze_until and datetime.now() < self.snooze_until)
+
     def _bring_to_front(self):
-        """Helper to bring window to front and focus."""
+        """Helper to bring window to front and focus - only if not snoozed."""
+        # Don't force window to front if alerts are snoozed
+        if self.snooze_until and datetime.now() < self.snooze_until:
+            return
+            
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def update_tray_menu(self):
+        """Update tray menu to reflect current state (e.g., enable/disable snooze)"""
+        # For now, just pass - this prevents the startup crash
+        # TODO: Re-implement tray menu functionality if needed
+        pass
 
     def update_all_tree_item_colors(self, base_text_color):
         """Update all tree item colors to work with the current background"""
