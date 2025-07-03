@@ -6,13 +6,20 @@ Modern, professional TV display for warehouse operations
 import sys
 import json
 import os
+import csv
+import random
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QGridLayout, QFrame, QPushButton,
                              QMessageBox, QScrollArea, QApplication, QDialog,
-                             QLineEdit, QDialogButtonBox, QFormLayout)
+                             QLineEdit, QDialogButtonBox, QFormLayout, QFileDialog, QComboBox)
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtCore import QUrl
+import os
+import json
+import sys
 
 # Import with error handling
 try:
@@ -69,7 +76,7 @@ class StatusCard(QFrame):
         # Combined time and status header
         self.time_status_label = QLabel(f"{self.time_str} - {self.status}")
         self.time_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        self.time_status_label.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))  # Increased from 22 to 24
+        self.time_status_label.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))  # Increased from 24 to 28
         self.time_status_label.setFixedWidth(280)  # Consistent fixed width for alignment
         self.time_status_label.mouseDoubleClickEvent = self.time_header_double_clicked
         # Set up hover effects with mouse events
@@ -115,14 +122,14 @@ class StatusCard(QFrame):
         
         # Acknowledgment status text
         self.ack_status_label = QLabel("")
-        self.ack_status_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))  # Increased from 16 to 18
+        self.ack_status_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))  # Reduced from 22 to 18 to prevent clipping
         self.ack_status_label.setStyleSheet("color: #2ed573; background: transparent;")
         self.ack_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # Left align
         ack_layout.addWidget(self.ack_status_label)
         
         # Reason/details text
         self.ack_details_label = QLabel("")
-        self.ack_details_label.setFont(QFont("Segoe UI", 16))  # Increased from 14 to 16
+        self.ack_details_label.setFont(QFont("Segoe UI", 16))  # Reduced from 20 to 16 to prevent clipping
         self.ack_details_label.setStyleSheet("color: #ffffff; background: transparent;")
         self.ack_details_label.setWordWrap(True)
         self.ack_details_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # Left align
@@ -251,16 +258,16 @@ class StatusCard(QFrame):
             for carrier, status in self.manifests:
                 # Create individual carrier label
                 carrier_label = QLabel()
-                carrier_label.setFont(QFont("Segoe UI", 18))  # Increased from 16 to 18
+                carrier_label.setFont(QFont("Segoe UI", 22))  # Increased from 18 to 22
                 carrier_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
                 # No padding at all for minimal line height
                 
                 # Set text and styling based on status (clean display)
                 if status == "Acknowledged":
-                    carrier_label.setText(f"{carrier} [DONE]")
+                    carrier_label.setText(carrier)
                     carrier_label.setStyleSheet("color: #2ed573; background: transparent;")
                 elif status == "AcknowledgedLate":
-                    carrier_label.setText(f"{carrier} [DONE LATE]")
+                    carrier_label.setText(carrier)
                     carrier_label.setStyleSheet("color: #ffb347; background: transparent;")
                 elif status == "Active":
                     carrier_label.setText(carrier)
@@ -270,7 +277,7 @@ class StatusCard(QFrame):
                     carrier_label.enterEvent = lambda event, label=carrier_label: self.carrier_hover_enter(label, "#ff4757")
                     carrier_label.leaveEvent = lambda event, label=carrier_label: self.carrier_hover_leave(label)
                 elif status == "Missed":
-                    carrier_label.setText(f"{carrier} [MISSED]")
+                    carrier_label.setText(carrier)
                     carrier_label.setStyleSheet("color: #ff4757; background: transparent; border-radius: 5px;")
                     # Make missed items clickable and hoverable
                     carrier_label.mousePressEvent = lambda event, c=carrier: self.acknowledge_single_carrier(c)
@@ -408,6 +415,31 @@ class StatusCard(QFrame):
 
 
 class AlertDisplay(QWidget):
+    def get_acknowledgments_path(self):
+        """Get path to acknowledgments file"""
+        try:
+            settings = self.load_settings()
+            data_folder = settings.get('data_folder', '')
+            
+            if data_folder and os.path.exists(data_folder):
+                return os.path.join(data_folder, 'ack.json')
+            
+            # Fallback to app_data folder
+            return os.path.join(os.path.dirname(__file__), 'app_data', 'ack.json')
+        except Exception:
+            return os.path.join(os.path.dirname(__file__), 'app_data', 'ack.json')
+    
+    def load_settings(self):
+        """Load application settings"""
+        try:
+            settings_path = os.path.join(os.path.dirname(__file__), 'app_data', 'settings.json')
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Manifest Times")
@@ -415,6 +447,9 @@ class AlertDisplay(QWidget):
         
         # Alert state management
         self.alert_active = False
+        
+        # Track previous window state for fullscreen toggle
+        self.previous_window_state = Qt.WindowState.WindowNoState
         
         # Set window icon
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'icon.ico')
@@ -426,9 +461,18 @@ class AlertDisplay(QWidget):
         self.status_cards = {}
         self.clock_timer = None
         self.refresh_timer = None
+        self.flash_timer = None  # Timer for alarm background flashing
+        self.pause_timer = None  # Timer for pause between flash cycles
+        self.flash_state = False  # Track flash on/off state
+        self.flash_cycle_count = 0  # Track number of flashes in current cycle
+        self.is_paused = False  # Track if we're in pause mode
+        
+        # Initialize sound effect
+        self.setup_sound()
+        
         self.setup_ui()
         self.setup_timers()
-        self.apply_dark_theme()
+        self.apply_background_style()  # Initialize background
         self.populate_data()
     
     def setup_ui(self):
@@ -442,11 +486,55 @@ class AlertDisplay(QWidget):
         
         # Title
         title_label = QLabel("MANIFEST TIMES")
-        title_label.setFont(QFont("Segoe UI", 36, QFont.Weight.Bold))
+        title_label.setFont(QFont("Segoe UI", 42, QFont.Weight.Bold))  # Increased from 36 to 42
         title_label.setStyleSheet("color: #ffffff; padding: 0px;")  # Removed bottom padding
         header_layout.addWidget(title_label)
         
         header_layout.addStretch()
+        
+        # Multi-monitor button
+        self.monitor_btn = QPushButton("🖥️")
+        self.monitor_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.monitor_btn.setFixedSize(60, 40)
+        self.monitor_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.monitor_btn.clicked.connect(self.show_monitor_menu)
+        header_layout.addWidget(self.monitor_btn)
+        
+        # Fullscreen button
+        self.fullscreen_btn = QPushButton("⛶")
+        self.fullscreen_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.fullscreen_btn.setFixedSize(60, 40)
+        self.fullscreen_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
+        header_layout.addWidget(self.fullscreen_btn)
         
         # Settings button with cog icon
         self.settings_btn = QPushButton("⚙️")
@@ -492,17 +580,17 @@ class AlertDisplay(QWidget):
         self.reload_btn.clicked.connect(self.populate_data)
         header_layout.addWidget(self.reload_btn)
         
-        # Clock
+        # Clock - DS-Digital font for 7-segment display look
         self.clock_label = QLabel()
-        self.clock_label.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
-        self.clock_label.setStyleSheet("color: #3742fa; padding: 0px; margin-left: 20px;")  # Removed bottom padding
+        self.clock_label.setFont(QFont("DS-Digital", 38, QFont.Weight.Bold))  # Increased from 32 to 38
+        self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px; text-shadow: 0px 0px 5px #B8860B;")  # Golden yellow with subtle glow
         header_layout.addWidget(self.clock_label)
         
         main_layout.addLayout(header_layout)
         
         # Status summary bar
         self.summary_label = QLabel("SYSTEM NOMINAL")
-        self.summary_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.summary_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))  # Increased from 18 to 22
         self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.summary_label.setStyleSheet("""
             background-color: #2ed573;
@@ -543,6 +631,58 @@ class AlertDisplay(QWidget):
         scroll_area.setWidget(cards_widget)
         main_layout.addWidget(scroll_area)
         self.setLayout(main_layout)
+        
+        # Initialize fullscreen icon to correct state
+        self.update_fullscreen_icon()
+    
+    def setup_sound(self):
+        """Initialize sound effect for alerts using QMediaPlayer for MP3 support"""
+        try:
+            sound_path = os.path.join(os.path.dirname(__file__), 'resources', 'alert.mp3')
+            if os.path.exists(sound_path):
+                self.alert_sound = QMediaPlayer()
+                self.audio_output = QAudioOutput()
+                self.alert_sound.setAudioOutput(self.audio_output)
+                self.alert_sound.setSource(QUrl.fromLocalFile(sound_path))
+                self.audio_output.setVolume(0.7)  # 70% volume
+                
+                # Set up looping - when playback finishes, restart if still in alarm mode
+                self.alert_sound.mediaStatusChanged.connect(self.on_media_status_changed)
+            else:
+                self.alert_sound = None
+                self.audio_output = None
+        except Exception:
+            self.alert_sound = None
+            self.audio_output = None
+
+    def on_media_status_changed(self, status):
+        """Handle media status changes to implement looping during alarm mode"""
+        from PyQt6.QtMultimedia import QMediaPlayer
+        
+        # When playback ends, restart if we're still in alarm mode
+        if (status == QMediaPlayer.MediaStatus.EndOfMedia and 
+            getattr(self, 'alarm_sound_playing', False) and 
+            getattr(self, 'alert_active', False)):
+            # Wait 500ms before restarting to ensure clean playback (3-second file needs breathing room)
+            QTimer.singleShot(500, self.restart_alarm_audio)
+
+    def restart_alarm_audio(self):
+        """Restart alarm audio if still in alarm mode"""
+        if (getattr(self, 'alarm_sound_playing', False) and 
+            getattr(self, 'alert_active', False) and
+            self.alert_sound):
+            # Stop and restart for cleaner playback
+            self.alert_sound.stop()
+            # Small delay to ensure stop completes
+            QTimer.singleShot(100, lambda: self.alert_sound.play() if self.alert_sound else None)
+
+    def changeEvent(self, event):
+        """Handle window state changes to update fullscreen icon"""
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange:
+            # Update icon when window state changes (including external changes)
+            self.update_fullscreen_icon()
+        super().changeEvent(event)
     
     def apply_dark_theme(self):
         """Apply SpaceX-style dark theme"""
@@ -601,6 +741,13 @@ class AlertDisplay(QWidget):
             self.clock_timer.stop()
         if hasattr(self, 'refresh_timer') and self.refresh_timer:
             self.refresh_timer.stop()
+        if hasattr(self, 'flash_timer') and self.flash_timer:
+            self.flash_timer.stop()
+        if hasattr(self, 'pause_timer') and self.pause_timer:
+            self.pause_timer.stop()
+        
+        # Initialize alarm state tracking
+        self.alarm_sound_playing = False  # Track if sound is currently playing
         
         # Clock timer
         self.clock_timer = QTimer(self)
@@ -610,9 +757,219 @@ class AlertDisplay(QWidget):
         # Data refresh timer
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.populate_data)
-        self.refresh_timer.start(30000)  # 30 seconds
+        self.refresh_timer.start(10000)  # 10 seconds (default when not in alert mode)
+        
+        # Flash timer for alarm background - SINGLE SHOT to prevent overlap
+        self.flash_timer = QTimer(self)
+        self.flash_timer.setSingleShot(False)  # Will be managed manually
+        self.flash_timer.timeout.connect(self.toggle_flash)
+        
+        # Pause timer for breaks between flash cycles - SINGLE SHOT
+        self.pause_timer = QTimer(self)
+        self.pause_timer.timeout.connect(self.resume_flashing)
+        self.pause_timer.setSingleShot(True)  # One-shot timer for pauses
+        
+        # Timer starts/stops based on alert state in update_flash_timer()
         
         self.update_clock()
+    
+    def update_refresh_timer(self):
+        """Update refresh timer interval based on alert state"""
+        if self.refresh_timer:
+            if self.alert_active:
+                # Alert mode: 1 second for real-time updates
+                self.refresh_timer.start(1000)
+            else:
+                # Normal mode: 10 seconds
+                self.refresh_timer.start(10000)
+    
+    def update_flash_timer(self):
+        """Start or stop flash timer based on alert state with single alarm instance"""
+        if self.flash_timer and self.pause_timer:
+            if self.alert_active:
+                # Only start alarm if not already running
+                if not self.flash_timer.isActive() and not self.pause_timer.isActive():
+                    # ALARM ACTIVATION: Bring to foreground and fullscreen on selected monitor
+                    self.activate_alarm_display()
+                    
+                    # Start the flash cycle with 3 red flashes
+                    self.flash_cycle_count = 0
+                    self.is_paused = False
+                    # Faster random flash speed between 2-10 Hz (100ms to 500ms) for more intense alarm
+                    import random
+                    flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
+                    self.flash_timer.start(flash_interval)
+                    
+                    # Start continuous alarm sound when alarm starts
+                    if self.alert_sound and not getattr(self, 'alarm_sound_playing', False):
+                        self.alarm_sound_playing = True
+                        self.alert_sound.play()  # Will loop automatically via media status handler
+            else:
+                # Stop all flashing and sound when alert is cleared
+                self.stop_all_alarms()
+    
+    def reset_sound_flag(self):
+        """Reset sound flag (fallback method)"""
+        self.alarm_sound_playing = False
+    
+    def stop_all_alarms(self):
+        """Stop all alarm timers and reset state"""
+        # Stop all timers
+        if self.flash_timer and self.flash_timer.isActive():
+            self.flash_timer.stop()
+        if self.pause_timer and self.pause_timer.isActive():
+            self.pause_timer.stop()
+            
+        # Reset all alarm state
+        self.flash_state = False
+        self.is_paused = False
+        self.alarm_sound_playing = False
+        
+        # Stop sound if playing
+        if self.alert_sound:
+            self.alert_sound.stop()
+            
+        # Ensure normal background
+        self.apply_background_style()
+    
+    def activate_alarm_display(self):
+        """Bring window to foreground and fullscreen on selected monitor when alarm starts"""
+        try:
+            # Load settings to get selected monitor
+            settings = self.load_settings()
+            target_monitor = settings.get('alarm_monitor', 0)
+            
+            # Get available screens
+            from PyQt6.QtGui import QGuiApplication
+            screens = QGuiApplication.screens()
+            
+            if target_monitor < len(screens):
+                target_screen = screens[target_monitor]
+                screen_geometry = target_screen.geometry()
+                
+                # Move window to target monitor and make it visible
+                self.setGeometry(screen_geometry)
+                
+                # Bring to foreground
+                self.raise_()
+                self.activateWindow()
+                self.show()
+                
+                # Set fullscreen on target monitor
+                self.setWindowState(Qt.WindowState.WindowFullScreen)
+                
+                # Force focus
+                self.setFocus()
+                
+            else:
+                # Fallback: just bring to front on current monitor
+                self.raise_()
+                self.activateWindow()
+                self.showMaximized()
+                
+        except Exception as e:
+            # Fallback: just bring to front
+            self.raise_()
+            self.activateWindow()
+            self.show()
+
+    def toggle_flash(self):
+        """Toggle flash state with 3 red flashes then random pause"""
+        if self.is_paused:
+            return
+            
+        self.flash_state = not self.flash_state
+        
+        # Count flashes (only count "on" states)
+        if self.flash_state:
+            self.flash_cycle_count += 1
+            
+            # After 3 red flashes, start random pause (3-10 seconds)
+            if self.flash_cycle_count >= 3:
+                self.flash_timer.stop()
+                self.is_paused = True
+                self.flash_state = False  # Ensure background goes to normal during pause
+                self.apply_background_style()
+                
+                # Random pause between 3-10 seconds
+                import random
+                pause_duration = random.randint(3000, 10000)  # 3-10 seconds in milliseconds
+                self.pause_timer.start(pause_duration)
+                return
+        
+        self.apply_background_style()
+    
+    def resume_flashing(self):
+        """Resume flashing after random pause with new random speed"""
+        # Only resume if alert is still active and we're not already flashing
+        if self.alert_active and not self.flash_timer.isActive():
+            self.flash_cycle_count = 0
+            self.is_paused = False
+            # New faster random flash speed for next cycle (2-10 Hz)
+            import random
+            flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
+            self.flash_timer.start(flash_interval)
+    
+    def apply_background_style(self):
+        """Apply background style with pure black default and pure red flash"""
+        if self.alert_active and self.flash_state and not self.is_paused:
+            # Pure red flash
+            bg_color = "#FF0000"
+        else:
+            # Pure black background
+            bg_color = "#000000"
+            
+        # Apply to main widget
+        self.setStyleSheet(f"""
+            AlertDisplay {{
+                background-color: {bg_color};
+            }}
+            QWidget {{
+                background-color: {bg_color};
+                color: #ffffff;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }}
+            QLabel {{
+                background: transparent;
+                color: inherit;
+            }}
+            QPushButton {{
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+                padding: 15px 30px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #4f69ff;
+            }}
+            QPushButton:pressed {{
+                background-color: #2c35e6;
+            }}
+            QMessageBox {{
+                background-color: #1a1a2e;
+                color: #ffffff;
+                font-size: 16px;
+            }}
+            QMessageBox QLabel {{
+                color: #ffffff;
+                font-size: 16px;
+            }}
+            QMessageBox QPushButton {{
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 80px;
+            }}
+            QMessageBox QPushButton:hover {{
+                background-color: #4f69ff;
+            }}
+        """)
     
     def update_clock(self):
         """Update the clock display"""
@@ -733,6 +1090,12 @@ class AlertDisplay(QWidget):
         # Update alert state
         self.alert_active = (active_count > 0 or missed_count > 0)
         
+        # Update refresh timer interval based on alert state
+        self.update_refresh_timer()
+        
+        # Update flash timer based on alert state
+        self.update_flash_timer()
+        
         # Update summary with next manifest countdown
         next_manifest_info = self.get_next_manifest_info(manifests, now)
         if active_count > 0:
@@ -832,10 +1195,10 @@ class AlertDisplay(QWidget):
             return {}
     
     def show_settings_dialog(self):
-        """Show settings configuration dialog"""
+        """Show settings configuration dialog with CSV export/import functionality"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Settings")
-        dialog.setFixedSize(500, 300)
+        dialog.setFixedSize(600, 550)  # Increased size for monitor selection
         dialog.setStyleSheet("""
             QDialog {
                 background-color: #1a1a2e;
@@ -867,6 +1230,7 @@ class AlertDisplay(QWidget):
                 border-radius: 5px;
                 padding: 8px 16px;
                 font-weight: bold;
+                min-height: 20px;
             }
             QPushButton:hover {
                 background-color: #4f69ff;
@@ -923,7 +1287,167 @@ class AlertDisplay(QWidget):
         folder_layout.addWidget(self.folder_status_label)
         
         form_layout.addRow("Data Folder:", folder_widget)
+        
+        # Alarm Monitor Selection
+        monitor_widget = QWidget()
+        monitor_layout = QVBoxLayout(monitor_widget)
+        monitor_layout.setContentsMargins(0, 0, 0, 0)
+        monitor_layout.setSpacing(5)
+        
+        self.monitor_combo = QComboBox()
+        self.monitor_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #2c2c54;
+                border: 2px solid #3742fa;
+                border-radius: 5px;
+                padding: 8px;
+                color: #ffffff;
+                font-size: 14px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #ffffff;
+            }
+        """)
+        
+        # Populate monitor list
+        from PyQt6.QtGui import QGuiApplication
+        screens = QGuiApplication.screens()
+        for i, screen in enumerate(screens):
+            geometry = screen.geometry()
+            self.monitor_combo.addItem(f"Monitor {i+1} ({geometry.width()}x{geometry.height()})", i)
+        
+        # Set current selection
+        current_monitor = current_settings.get('alarm_monitor', 0)
+        if current_monitor < self.monitor_combo.count():
+            self.monitor_combo.setCurrentIndex(current_monitor)
+        
+        monitor_layout.addWidget(self.monitor_combo)
+        
+        # Monitor help text
+        monitor_help = QLabel("Monitor where fullscreen alarm will appear")
+        monitor_help.setStyleSheet("color: #888888; font-size: 12px;")
+        monitor_layout.addWidget(monitor_help)
+        
+        form_layout.addRow("Alarm Monitor:", monitor_widget)
         layout.addLayout(form_layout)
+        
+        # CSV Operations Section
+        csv_group = QWidget()
+        csv_group.setStyleSheet("""
+            QWidget {
+                background-color: #2c2c54;
+                border: 1px solid #3742fa;
+                border-radius: 8px;
+                padding: 10px;
+            }
+        """)
+        csv_layout = QVBoxLayout(csv_group)
+        csv_layout.setContentsMargins(15, 15, 15, 15)
+        
+        csv_title = QLabel("CSV Operations:")
+        csv_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        csv_title.setStyleSheet("background: transparent; border: none; color: #ffffff;")
+        csv_layout.addWidget(csv_title)
+        
+        # CSV buttons layout
+        csv_buttons_layout = QHBoxLayout()
+        
+        # Export Acknowledgments button
+        self.export_ack_btn = QPushButton("Export Ack")
+        self.export_ack_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #1e8449;
+            }
+        """)
+        self.export_ack_btn.clicked.connect(self.export_to_csv_from_settings)
+        csv_buttons_layout.addWidget(self.export_ack_btn)
+        
+        # Export Config button
+        self.export_config_btn = QPushButton("Export Config")
+        self.export_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f39c12;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #f1c40f;
+            }
+            QPushButton:pressed {
+                background-color: #d68910;
+            }
+        """)
+        self.export_config_btn.clicked.connect(self.export_config_to_csv_from_settings)
+        csv_buttons_layout.addWidget(self.export_config_btn)
+        
+        # Import Config button
+        self.import_config_btn = QPushButton("Import Config")
+        self.import_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #ec7063;
+            }
+            QPushButton:pressed {
+                background-color: #c0392b;
+            }
+        """)
+        self.import_config_btn.clicked.connect(self.import_config_from_csv)
+        csv_buttons_layout.addWidget(self.import_config_btn)
+        
+        # Open CSV Folder button
+        self.open_folder_btn = QPushButton("Open CSV Folder")
+        self.open_folder_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9b59b6;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #af7ac5;
+            }
+            QPushButton:pressed {
+                background-color: #7d3c98;
+            }
+        """)
+        self.open_folder_btn.clicked.connect(self.open_csv_folder)
+        csv_buttons_layout.addWidget(self.open_folder_btn)
+        
+        csv_layout.addLayout(csv_buttons_layout)
+        layout.addWidget(csv_group)
         
         # Buttons
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -1026,10 +1550,12 @@ class AlertDisplay(QWidget):
             # Preserve existing values if new ones are empty (except for intentional clearing)
             final_username = new_username if new_username else original_settings.get('username', '')
             final_folder = new_folder  # Allow empty folder (uses defaults)
+            final_monitor = self.monitor_combo.currentData() if hasattr(self, 'monitor_combo') else 0
             
             settings = {
                 'username': final_username,
-                'data_folder': final_folder
+                'data_folder': final_folder,
+                'alarm_monitor': final_monitor
             }
             
             settings_path = os.path.join(os.path.dirname(__file__), 'settings.json')
@@ -1044,6 +1570,9 @@ class AlertDisplay(QWidget):
     
     def closeEvent(self, event):
         """Handle window close event with proper cleanup"""
+        # Stop all alarms first
+        self.stop_all_alarms()
+        
         # Stop all timers
         if self.clock_timer:
             self.clock_timer.stop()
@@ -1051,6 +1580,12 @@ class AlertDisplay(QWidget):
         if self.refresh_timer:
             self.refresh_timer.stop()
             self.refresh_timer = None
+        if self.flash_timer:
+            self.flash_timer.stop()
+            self.flash_timer = None
+        if self.pause_timer:
+            self.pause_timer.stop()
+            self.pause_timer = None
         
         # Clean up status cards
         for card in self.status_cards.values():
@@ -1214,6 +1749,450 @@ class AlertDisplay(QWidget):
             
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save acknowledgment: {e}")
+
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and previous window state"""
+        if self.isFullScreen():
+            # From fullscreen -> restore to previous state
+            if self.previous_window_state == Qt.WindowState.WindowMaximized:
+                self.showMaximized()
+            else:
+                self.showNormal()
+            # Set icon immediately for non-fullscreen state (can go fullscreen)
+            self.fullscreen_btn.setText("⛶")
+        else:
+            # From normal or maximized -> fullscreen
+            # Remember current state before going fullscreen
+            if self.isMaximized():
+                self.previous_window_state = Qt.WindowState.WindowMaximized
+            else:
+                self.previous_window_state = Qt.WindowState.WindowNoState
+            
+            self.showFullScreen()
+            # Set icon immediately for fullscreen state (can restore)
+            self.fullscreen_btn.setText("🗗")
+
+    def update_fullscreen_icon(self):
+        """Update fullscreen button icon based on current window state"""
+        # Use a delayed check to ensure window state has fully changed
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._delayed_icon_update)
+    
+    def _delayed_icon_update(self):
+        """Delayed icon update to ensure accurate state detection"""
+        if self.isFullScreen():
+            self.fullscreen_btn.setText("🗗")  # Restore icon (can exit fullscreen)
+        else:
+            self.fullscreen_btn.setText("⛶")  # Fullscreen icon (can go fullscreen)
+
+    def show_monitor_menu(self):
+        """Show monitor selection menu"""
+        from PyQt6.QtWidgets import QMenu
+        
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1a1a2e;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 8px;
+                padding: 5px;
+                font-size: 14px;
+            }
+            QMenu::item {
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #3742fa;
+            }
+        """)
+        
+        # Get available screens
+        screens = QApplication.screens()
+        
+        for i, screen in enumerate(screens):
+            # Get screen geometry and name
+            geometry = screen.geometry()
+            name = screen.name() if hasattr(screen, 'name') and screen.name() else f"Monitor {i+1}"
+            resolution = f"{geometry.width()}x{geometry.height()}"
+            
+            action_text = f"{name} ({resolution})"
+            action = menu.addAction(action_text)
+            action.triggered.connect(lambda checked, idx=i: self.move_to_monitor(idx))
+        
+        # Show menu at button position
+        button_pos = self.monitor_btn.mapToGlobal(self.monitor_btn.rect().bottomLeft())
+        menu.exec(button_pos)
+
+    def move_to_monitor(self, monitor_index):
+        """Move window to specified monitor"""
+        try:
+            screens = QApplication.screens()
+            if 0 <= monitor_index < len(screens):
+                target_screen = screens[monitor_index]
+                
+                # Get screen geometry
+                screen_geometry = target_screen.geometry()
+                
+                # If fullscreen, exit fullscreen first, move, then re-enter fullscreen
+                was_fullscreen = self.isFullScreen()
+                if was_fullscreen:
+                    self.showNormal()
+                
+                # Move window to center of target screen
+                window_size = self.size()
+                new_x = screen_geometry.x() + (screen_geometry.width() - window_size.width()) // 2
+                new_y = screen_geometry.y() + (screen_geometry.height() - window_size.height()) // 2
+                
+                self.move(new_x, new_y)
+                
+                # Re-enter fullscreen if it was fullscreen before
+                if was_fullscreen:
+                    self.showFullScreen()
+                
+                # Update icon to reflect current state
+                self.update_fullscreen_icon()
+                    
+        except Exception as e:
+            print(f"Error moving to monitor {monitor_index}: {e}")
+    
+    def export_to_csv(self):
+        """Export acknowledgment data to CSV file (deprecated - use export_to_csv_from_settings)"""
+        QMessageBox.information(self, "Feature Moved", 
+                              "CSV export functionality has been moved to Settings.\nPlease use the ⚙️ Settings button.")
+    
+    def export_config_to_csv(self):
+        """Export config data to CSV file (deprecated - use export_config_to_csv_from_settings)"""
+        QMessageBox.information(self, "Feature Moved", 
+                              "CSV export functionality has been moved to Settings.\nPlease use the ⚙️ Settings button.")
+    
+    def get_csv_folder_path(self):
+        """Get the CSV folder path based on settings"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            return None
+            
+        csv_folder = os.path.join(data_folder, 'csv')
+        return csv_folder
+    
+    def ensure_csv_folder_exists(self):
+        """Ensure CSV folder exists, create if needed"""
+        csv_folder = self.get_csv_folder_path()
+        if not csv_folder:
+            return False
+            
+        try:
+            os.makedirs(csv_folder, exist_ok=True)
+            return True
+        except Exception:
+            return False
+    
+    def export_to_csv_from_settings(self):
+        """Export acknowledgment data to CSV in data folder and open Excel"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings before exporting.")
+            return
+        
+        if not self.ensure_csv_folder_exists():
+            QMessageBox.critical(self, "Folder Error", 
+                               "Could not create CSV folder in data directory.")
+            return
+        
+        try:
+            # Load acknowledgment data
+            ack_path = self.get_acknowledgments_path()
+            if not os.path.exists(ack_path):
+                QMessageBox.information(self, "No Data", "No acknowledgment data found to export.")
+                return
+            
+            with open(ack_path, 'r') as f:
+                ack_data = json.load(f)
+            
+            if not ack_data:
+                QMessageBox.information(self, "No Data", "No acknowledgment data found to export.")
+                return
+            
+            # Generate filename with current date
+            current_date = datetime.now().strftime("%d%m%Y")
+            filename = f"manifest_ack-{current_date}.csv"
+            csv_folder = self.get_csv_folder_path()
+            file_path = os.path.join(csv_folder, filename)
+            
+            # Export CSV data
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Write header
+                writer.writerow(['Date', 'Time', 'Carrier', 'User', 'Reason', 'Timestamp'])
+                
+                # Handle list format (correct format used by the system)
+                if isinstance(ack_data, list):
+                    for ack_item in ack_data:
+                        if isinstance(ack_item, dict):
+                            date = ack_item.get('date', '')
+                            time = ack_item.get('manifest_time', '')
+                            carrier = ack_item.get('carrier', '')
+                            user = ack_item.get('user', '')
+                            reason = ack_item.get('reason', '')
+                            timestamp = ack_item.get('timestamp', '')
+                            
+                            writer.writerow([date, time, carrier, user, reason, timestamp])
+                else:
+                    # Handle old nested dictionary format for backward compatibility
+                    for date_key, date_data in ack_data.items():
+                        if isinstance(date_data, dict):
+                            for time_key, time_data in date_data.items():
+                                if isinstance(time_data, dict):
+                                    user = time_data.get('user', '')
+                                    reason = time_data.get('reason', '')
+                                    timestamp = time_data.get('timestamp', '')
+                                    
+                                    writer.writerow([date_key, time_key, '', user, reason, timestamp])
+            
+            # Open in Excel
+            self.open_file_in_excel(file_path)
+            
+            QMessageBox.information(self, "Export Complete", 
+                                  f"Data exported successfully to:\n{file_path}\n\nOpening in Excel...")
+            
+        except PermissionError as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export acknowledgment data:\n\n"
+                               f"The file may be open in Excel or another program.\n"
+                               f"Please close the file and try again.\n\n"
+                               f"File: {file_path}\n"
+                               f"Error: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export acknowledgment data:\n\n{str(e)}")
+    
+    def export_config_to_csv_from_settings(self):
+        """Export config data to CSV in data folder and open Excel"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings before exporting.")
+            return
+        
+        if not self.ensure_csv_folder_exists():
+            QMessageBox.critical(self, "Folder Error", 
+                               "Could not create CSV folder in data directory.")
+            return
+        
+        try:
+            # Load config data
+            config = self.load_config()
+            
+            if not config or not config.get('manifests'):
+                QMessageBox.information(self, "No Data", "No manifest configuration data found to export.")
+                return
+            
+            # Generate filename with current date
+            current_date = datetime.now().strftime("%d%m%Y")
+            filename = f"manifest_config-{current_date}.csv"
+            csv_folder = self.get_csv_folder_path()
+            file_path = os.path.join(csv_folder, filename)
+            
+            # Export in importable format
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Write header matching import format
+                writer.writerow(['time', 'carriers'])
+                
+                # Write data rows in importable format
+                manifests = config.get('manifests', [])
+                for manifest in manifests:
+                    time_slot = manifest.get('time', '')
+                    carriers = manifest.get('carriers', [])
+                    # Join carriers with semicolon for easy import parsing
+                    carriers_str = ';'.join(carriers) if carriers else ''
+                    
+                    writer.writerow([time_slot, carriers_str])
+            
+            # Open in Excel
+            self.open_file_in_excel(file_path)
+            
+            QMessageBox.information(self, "Export Complete", 
+                                  f"Configuration exported successfully to:\n{file_path}\n\nFormat: time,carriers (semicolon-separated)\nThis file can be imported back into the system.\n\nOpening in Excel...")
+            
+        except PermissionError as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export configuration data:\n\n"
+                               f"The file may be open in Excel or another program.\n"
+                               f"Please close the file and try again.\n\n"
+                               f"File: {file_path}\n"
+                               f"Error: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export configuration data:\n\n{str(e)}")
+    
+    def open_file_in_excel(self, file_path):
+        """Open file in Excel or default CSV application"""
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == 'Windows':
+                os.startfile(file_path)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.call(['open', file_path])
+            else:  # Linux
+                subprocess.call(['xdg-open', file_path])
+        except Exception as e:
+            print(f"Could not open file in Excel: {e}")
+    
+    def open_csv_folder(self):
+        """Open the CSV folder in file explorer"""
+        csv_folder = self.get_csv_folder_path()
+        
+        if not csv_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings first.")
+            return
+        
+        if not os.path.exists(csv_folder):
+            if not self.ensure_csv_folder_exists():
+                QMessageBox.critical(self, "Folder Error", 
+                                   "Could not create CSV folder.")
+                return
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == 'Windows':
+                os.startfile(csv_folder)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.call(['open', csv_folder])
+            else:  # Linux
+                subprocess.call(['xdg-open', csv_folder])
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not open folder:\n{str(e)}")
+    
+    def create_backup_config(self):
+        """Create timestamped backup of current config"""
+        try:
+            settings = self.load_settings()
+            data_folder = settings.get('data_folder', '').strip()
+            
+            if not data_folder:
+                return False
+            
+            # Create backup folder if it doesn't exist
+            backup_folder = os.path.join(data_folder, 'backup')
+            os.makedirs(backup_folder, exist_ok=True)
+            
+            # Get current config path
+            config_path = os.path.join(data_folder, 'config.json')
+            if not os.path.exists(config_path):
+                return False
+            
+            # Create timestamped backup
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"config_backup_{timestamp}.json"
+            backup_path = os.path.join(backup_folder, backup_filename)
+            
+            # Copy file
+            import shutil
+            shutil.copy2(config_path, backup_path)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Backup creation failed: {e}")
+            return False
+    
+    def import_config_from_csv(self):
+        """Import configuration from CSV file with backup"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings before importing.")
+            return
+        
+        # Open file dialog in the CSV folder
+        csv_folder = os.path.join(data_folder, 'csv')
+        if not os.path.exists(csv_folder):
+            csv_folder = data_folder  # Fallback to data folder
+        
+        # Get CSV file from user
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Configuration",
+            csv_folder,  # Start in CSV folder
+            "CSV files (*.csv);;All files (*.*)"
+        )
+        
+        if not file_path:
+            return  # User cancelled
+        
+        try:
+            # Create backup first
+            if not self.create_backup_config():
+                if not QMessageBox.question(self, "Backup Failed", 
+                                           "Could not create backup. Continue with import?",
+                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                    return
+            
+            # Read CSV file
+            manifests = []
+            with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                
+                # Skip header
+                next(reader, None)
+                
+                for row in reader:
+                    if len(row) >= 2:
+                        time_slot = row[0].strip()
+                        carriers_str = row[1].strip()
+                        
+                        # Parse carriers (semicolon-separated)
+                        if carriers_str:
+                            carriers = [c.strip() for c in carriers_str.split(';') if c.strip()]
+                        else:
+                            carriers = []
+                        
+                        if time_slot and carriers:
+                            manifests.append({
+                                "time": time_slot,
+                                "carriers": carriers
+                            })
+            
+            if not manifests:
+                QMessageBox.warning(self, "Import Error", "No valid manifest data found in CSV file.")
+                return
+            
+            # Create new config
+            new_config = {
+                "manifests": manifests
+            }
+            
+            # Save new config
+            config_path = os.path.join(data_folder, 'config.json')
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(new_config, f, indent=2)
+            
+            # Refresh display
+            self.populate_data()
+            
+            QMessageBox.information(self, "Import Complete", 
+                                  f"Configuration imported successfully!\n\nImported {len(manifests)} manifest time slots.\nBackup created in backup folder.")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", f"Failed to import configuration:\n{str(e)}")
 
 
 
