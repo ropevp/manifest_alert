@@ -1,8 +1,8 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt
-from alert_display import AlertDisplay
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtCore import Qt
+from ui_display import AlertDisplay
 import os
 
 if __name__ == "__main__":
@@ -14,9 +14,11 @@ if __name__ == "__main__":
     app.setOrganizationName("Warehouse Systems")
     
     # Set application icon for taskbar display
-    icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'icon.ico')
     if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+        app_icon = QIcon(icon_path)
+        if not app_icon.isNull():
+            app.setWindowIcon(app_icon)
     
     # Windows-specific: Set application ID to avoid Python grouping in taskbar
     try:
@@ -26,9 +28,10 @@ if __name__ == "__main__":
     except:
         pass  # Ignore if not on Windows or if ctypes fails
     
-    app.setQuitOnLastWindowClosed(False)
+    # Allow application to quit when window is closed
+    app.setQuitOnLastWindowClosed(True)
     window = AlertDisplay()
-    window.setWindowState(window.windowState() | Qt.WindowMaximized)
+    window.setWindowState(window.windowState() | Qt.WindowState.WindowMaximized)
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
