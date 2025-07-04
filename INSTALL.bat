@@ -45,7 +45,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo ✅ Git and Python are available
+echo Git and Python are available
 
 echo.
 echo [2/4] Downloading Manifest Alert System...
@@ -73,7 +73,7 @@ echo [4/4] Creating desktop shortcut...
 
 echo.
 echo ===============================================================
-echo ✅ INSTALLATION COMPLETE!
+echo INSTALLATION COMPLETE!
 echo ===============================================================
 echo.
 echo To launch Manifest Alert System:
@@ -89,9 +89,9 @@ echo.
 echo [1/4] Backing up your settings...
 if exist "data\config.json" (
     copy "data\config.json" "data\config.json.backup" >nul
-    echo ✅ Settings backed up
+    echo Settings backed up
 ) else (
-    echo ℹ️  No existing settings found
+    echo No existing settings found
 )
 
 echo.
@@ -131,7 +131,7 @@ if exist ".venv\Scripts\python.exe" (
 if exist "data\config.json.backup" (
     if not exist "data\config.json" (
         copy "data\config.json.backup" "data\config.json" >nul
-        echo ✅ Settings restored
+        echo Settings restored
     )
 )
 
@@ -141,7 +141,7 @@ echo [4/4] Ensuring shortcuts are available...
 
 echo.
 echo ===============================================================
-echo ✅ UPDATE COMPLETE!
+echo UPDATE COMPLETE!
 echo ===============================================================
 echo.
 echo Manifest Alert System has been updated to the latest version
