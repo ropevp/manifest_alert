@@ -28,7 +28,7 @@ cd /d "C:\ManifestAlerts"
 REM Download the main installer
 echo.
 echo Downloading installer from GitHub...
-curl -o INSTALL.bat https://raw.githubusercontent.com/e10120323/manifest_alerts/main/INSTALL.bat
+curl -o INSTALL.bat https://raw.githubusercontent.com/ropevp/manifest_alert/main/INSTALL.bat
 if errorlevel 1 (
     echo ERROR: Failed to download installer
     echo Please check your internet connection
