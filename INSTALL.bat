@@ -69,7 +69,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo [4/4] Creating desktop shortcut...
-.venv\Scripts\python.exe install_shortcuts.py
+.venv\Scripts\python.exe install_shortcuts.py --silent
 
 echo.
 echo ===============================================================
@@ -86,7 +86,7 @@ goto :end
 
 :update
 echo.
-echo [1/3] Backing up your settings...
+echo [1/4] Backing up your settings...
 if exist "data\config.json" (
     copy "data\config.json" "data\config.json.backup" >nul
     echo ✅ Settings backed up
@@ -95,7 +95,7 @@ if exist "data\config.json" (
 )
 
 echo.
-echo [2/3] Downloading latest version...
+echo [2/4] Downloading latest version...
 git fetch origin
 git reset --hard origin/main
 if %errorlevel% neq 0 (
@@ -106,13 +106,26 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [3/3] Updating dependencies...
+echo [3/4] Updating dependencies...
 if exist ".venv\Scripts\python.exe" (
     .venv\Scripts\pip install -r requirements.txt
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install dependencies
+        echo This usually means a package version is incompatible
+        echo Try deleting .venv folder and running this installer again
+        pause
+        exit /b 1
+    )
 ) else (
     echo Creating virtual environment...
     python -m venv .venv
     .venv\Scripts\pip install -r requirements.txt
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install dependencies
+        echo This usually means a package version is incompatible
+        pause
+        exit /b 1
+    )
 )
 
 if exist "data\config.json.backup" (
@@ -121,6 +134,10 @@ if exist "data\config.json.backup" (
         echo ✅ Settings restored
     )
 )
+
+echo.
+echo [4/4] Ensuring shortcuts are available...
+.venv\Scripts\python.exe install_shortcuts.py --silent
 
 echo.
 echo ===============================================================

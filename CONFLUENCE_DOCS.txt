@@ -1,0 +1,147 @@
+MANIFEST ALERT SYSTEM V2 - CONFLUENCE DOCUMENTATION
+==================================================
+
+📋 Quick Setup Guide
+------------------
+1. Install Prerequisites:
+   - Python (python.org) - CHECK "Add Python to PATH"
+   - Git (git-scm.com)
+
+2. One-Click Installation:
+   - Create folder (e.g., C:\ManifestAlerts)
+   - Download INSTALL.bat to that folder
+   - Double-click INSTALL.bat
+   - Use desktop shortcut to launch
+
+3. Updates:
+   - Run INSTALL.bat again (preserves settings)
+   - Shortcuts automatically updated/restored
+
+📊 Key Features
+--------------
+✅ Modern PyQt6 interface with SpaceX-style mission control design
+✅ Card-based display: 320x200px status cards in responsive grid
+✅ TV-optimized fonts: 36pt headers for warehouse visibility
+✅ Real-time multi-PC sync via shared folders
+✅ Color-coded status: Red=Active, Blue=Pending, Green=Acknowledged
+✅ Professional Windows integration with desktop shortcuts
+✅ Zero-maintenance operation with automatic updates
+
+🛠️ Technical Specs
+-----------------
+- Framework: PyQt6 (latest Qt6 APIs)
+- Architecture: Modern card-based UI (400 lines vs 1400+ in V1)
+- Performance: No window state issues, clean updates
+- Storage: Configurable paths with multi-PC sync support
+- Deployment: Virtual environment isolation, dependency management
+- Status Logic: Time-based calculation (Active/Missed/Pending)
+
+📱 Daily Usage
+-------------
+- Launch: Desktop shortcut "Manifest Alert System"
+- Or: Windows key + type "Manifest Alert"
+- Troubleshooting: Run launch_diagnostic.bat
+- Updates: Re-run INSTALL.bat (automatic detection)
+
+🔧 Installation Process
+----------------------
+FRESH INSTALL:
+[1/4] Check prerequisites (Git, Python)
+[2/4] Download from GitHub
+[3/4] Setup virtual environment + dependencies  
+[4/4] Create desktop & Start Menu shortcuts
+
+UPDATE:
+[1/4] Backup settings
+[2/4] Download latest version
+[3/4] Update dependencies
+[4/4] Ensure shortcuts available (restore if deleted)
+
+📁 File Structure
+----------------
+YourFolder/
+├── INSTALL.bat              # One-click installer/updater
+├── main.py                  # PyQt6 application entry
+├── alert_display.py         # Modern card-based UI
+├── data_manager.py          # JSON file operations
+├── scheduler.py             # Manifest status calculation
+├── settings_manager.py      # Configurable storage
+├── .venv/                  # Virtual environment (auto)
+├── resources/              # Icons, sounds
+└── Desktop shortcut        # Easy launch access
+
+🎨 V2 UI Design
+--------------
+- Deep space background (#0f0f23) with bright accents
+- Status cards in 3-column responsive grid layout
+- Large typography for warehouse TV displays
+- Gradient status bars with professional styling
+- No complex tree widgets (eliminated V1 issues)
+- Clean card recreation without window disruption
+
+💾 Data Storage
+--------------
+- App settings: app_data/settings.json (local)
+- Manifest data: Configurable path for multi-PC sync
+- Backup strategy: Automatic backup/restore during updates
+- Permission validation: Write-access testing before use
+- Multi-PC sync: Via Google Drive or network shares
+
+🚨 Status System
+---------------
+ACTIVE (Red #ff4757): 2min before to 30min after scheduled time
+MISSED (Orange #c44569): More than 30min overdue
+PENDING (Blue #3742fa): Future manifests not yet active
+ACKNOWLEDGED (Green #2ed573): Completed by warehouse staff
+
+⚡ Performance
+-------------
+- Modern PyQt6 framework with improved memory management
+- Resource-efficient card updates without state preservation
+- Stable operation without expand/collapse anti-patterns
+- Professional Windows integration with proper taskbar ID
+- Virtual environment isolation prevents system conflicts
+
+🔄 Update Strategy
+-----------------
+- Same INSTALL.bat works for both install and updates
+- Automatic detection of existing vs fresh installation
+- Settings preservation with backup/restore functionality
+- Shortcut recreation ensures desktop access is maintained
+- Zero-downtime updates with graceful handling
+
+🏭 Warehouse Deployment
+---------------------
+- TV-optimized design for large displays
+- Multi-monitor support with direct selection
+- Professional appearance suitable for management visibility
+- Zero-maintenance operation once installed
+- Network/cloud sync for multi-PC warehouse environments
+- Desktop shortcuts ensure easy staff access
+
+⚙️ Technical Requirements
+------------------------
+- Windows 7+ (tested on Windows 10/11)
+- Python 3.8+ (automatic virtual environment)
+- Git (for installation/updates)
+- 50MB disk space
+- Network access for updates
+- Optional: Shared folder for multi-PC sync
+
+📞 Support Information
+---------------------
+- All error messages include clear solutions
+- launch_diagnostic.bat provides detailed troubleshooting
+- Re-running INSTALL.bat fixes most dependency issues
+- Backup folder contains previous versions if needed
+- Self-documenting installation process with step-by-step guidance
+
+🎯 Production Ready
+------------------
+✅ Clean codebase with test files moved to backup/
+✅ Comprehensive .gitignore for deployment
+✅ Professional installer with error handling
+✅ Automatic shortcut management
+✅ Settings preservation across updates
+✅ Zero-configuration deployment for end users
+✅ Modern PyQt6 architecture ready for long-term use
