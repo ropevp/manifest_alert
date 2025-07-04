@@ -8,24 +8,7 @@ echo This will install Manifest Alert System to: C:\ManifestAlerts
 echo.
 pause
 
-REM Create installation directory on C: drive
-if not exist "C:\ManifestAlerts" (
-    echo Creating installation directory...
-    mkdir "C:\ManifestAlerts"
-    if errorlevel 1 (
-        echo ERROR: Cannot create C:\ManifestAlerts directory
-        echo Please run as Administrator or check permissions
-        pause
-        exit /b 1
-    )
-) else (
-    echo Installation directory already exists.
-)
-
-REM Navigate to installation directory
-cd /d "C:\ManifestAlerts"
-
-REM Download the main installer
+REM Download the main installer to current directory
 echo.
 echo Downloading installer from GitHub...
 curl -o INSTALL.bat https://raw.githubusercontent.com/ropevp/manifest_alert/main/INSTALL.bat
@@ -36,7 +19,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Run the main installer
+REM Run the main installer (it will handle creating C:\ManifestAlerts)
 echo.
 echo Running main installer...
 echo.
