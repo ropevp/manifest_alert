@@ -19,7 +19,7 @@ MANIFEST ALERT SYSTEM V2 - CONFLUENCE DOCUMENTATION
 
 📊 Key Features
 --------------
-✅ Modern PyQt6 interface with SpaceX-style mission control design
+✅ Modern PyQt6 interface with dark theme design
 ✅ Card-based display: 320x200px status cards in responsive grid
 ✅ TV-optimized fonts: 36pt headers for warehouse visibility
 ✅ Real-time multi-PC sync via shared folders

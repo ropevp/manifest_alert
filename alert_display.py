@@ -1,5 +1,5 @@
 """
-Manifest Alerts V2 - SpaceX-Style Mission Control Display
+Manifest Alerts V2 - Modern Dark Theme Display
 Modern, professional TV display for warehouse operations
 """
 
@@ -489,7 +489,7 @@ class AlertDisplay(QWidget):
         self.populate_data()
     
     def setup_ui(self):
-        """Create the modern mission control layout"""
+        """Create the modern card layout"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 30 to 10
         main_layout.setSpacing(10)  # Reduced spacing from 20 to 10
@@ -698,7 +698,7 @@ class AlertDisplay(QWidget):
         super().changeEvent(event)
     
     def apply_dark_theme(self):
-        """Apply SpaceX-style dark theme"""
+        """Apply modern dark theme"""
         self.setStyleSheet("""
             QWidget {
                 background-color: #0f0f23;
