@@ -1,19 +1,50 @@
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
 # App data folder (contains settings and configurable data files)
 app_data/
 
 # Test outputs and temporary files
 tests/output/
 tests/__pycache__/
+test_*.py
+*_test.py
 *.log
 *.tmp
 
-# Backup files
+# Backup files and development artifacts
 backup/
+*.bak
+*.backup
+v2.md
+tickets.md
+
+# User-specific data files
+data/
+settings.json
+acknowledgments.json
 
 # Legacy paths (for backward compatibility)
 logs/acknowledgments.json
 data/config.json
 
-# User-specific data files
-data/
-settings.json
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Windows specific
+Thumbs.db
+desktop.ini
+*.lnk

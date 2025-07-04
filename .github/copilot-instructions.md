@@ -1,74 +1,70 @@
-# Manifest Alert System - AI Coding Agent Instructions
+# Manifest Alert System V2 - AI Coding Agent Instructions
 
 ## 🏗️ Architecture Overview
 
-This is a **warehouse-grade PyQt5 desktop application** for shipping manifest alerts with real-time synchronization across multiple PCs. The system follows a modular architecture with clear separation of concerns:
+This is a **warehouse-grade PyQt6 desktop application** for shipping manifest alerts with modern SpaceX-style UI and real-time synchronization across multiple PCs. The system follows a modular architecture with clean separation of concerns:
 
 - **`main.py`**: Entry point with Windows taskbar integration (`SetCurrentProcessExplicitAppUserModelID`)
-- **`alert_display.py`**: Core UI widget (1400+ lines) with system tray, audio, and window management
+- **`alert_display.py`**: Modern card-based UI (400 lines) with SpaceX-style mission control design
 - **`data_manager.py`**: JSON file operations for `config.json` and `acknowledgments.json`
 - **`scheduler.py`**: Time-based manifest status calculation (Active/Missed/Pending)
 - **`settings_manager.py`**: Configurable data storage paths with validation UI
-- **`sound_handler.py`**: Simple audio alert wrapper around PyQt5.QtMultimedia
+- **`sound_handler.py`**: Audio alert wrapper (currently unused in V2)
 
-## 🔧 Critical Development Patterns
+## 🎨 V2 Modern UI Design Principles
+
+### SpaceX-Style Mission Control Interface
+- **Dark theme**: Deep space background (#0f0f23) with bright accent colors
+- **Card-based layout**: 320x200px status cards in responsive 3-column grid
+- **Large typography**: TV-optimized fonts (36pt title, 32pt clock, 28pt headers)
+- **Professional aesthetics**: Gradients, smooth borders, mission control styling
+
+### Color Coding System
+```python
+# Status color palette
+ACTIVE = "#ff4757"      # Bright red for urgent alerts
+MISSED = "#c44569"      # Dark red for missed manifests  
+PENDING = "#3742fa"     # Blue for upcoming manifests
+ACKNOWLEDGED = "#2ed573" # Green for completed items
+```
+
+### Card Layout Architecture
+```python
+class StatusCard(QFrame):
+    # Fixed 320x200px cards with:
+    # - Large time header (36pt)
+    # - Status indicator (20pt) 
+    # - Manifest details (18pt)
+    # - Gradient status bar at bottom
+```
+
+## 🔧 Critical V2 Development Patterns
 
 ### Virtual Environment Architecture
-- **Always use `.venv\Scripts\python.exe`** in batch files - system Python causes PyQt5 import failures
+- **Always use `.venv\Scripts\python.exe`** in batch files - system Python causes import failures
+- **PyQt6 framework**: Modern Qt6 APIs with better performance than PyQt5
 - The `INSTALL.bat` handles both fresh installs and updates via Git detection
 - All launchers (`launch_*.bat`) must use virtual environment Python paths
 
-### Window Management Anti-Patterns
-**⚠️ CRITICAL: NEVER call `show()` when window is in fullscreen or maximized state** - this causes unwanted minimization and window shifting:
+### Modern UI Update Patterns
+**✅ SAFE: Card-based updates without window disruption**
 ```python
-# ❌ WRONG - causes window to minimize/shift in fullscreen/maximized
-current_state = self.windowState()
-self.show()  # This breaks fullscreen/maximized window state
-
-# ✅ CORRECT - state-aware window operations
-def _ensure_window_visibility(self):
-    current_state = self.windowState()
-    if current_state & Qt.WindowFullScreen or current_state & Qt.WindowMaximized:
-        # NEVER call show() - only raise and activate
-        self.raise_()
-        self.activateWindow()
-    else:
-        # Normal state - safe to use show()
-        self.show()
-        self.raise_()
-        self.activateWindow()
+# V2 approach - update data, refresh cards
+def populate_data(self):
+    # Clear existing cards cleanly
+    for card in self.status_cards.values():
+        card.setParent(None)
+    self.status_cards.clear()
+    
+    # Recreate cards with new data
+    # NO tree operations, NO window state issues
 ```
 
-**⚠️ Modal Dialog Anti-Pattern**: Modal dialogs disrupt window state - always preserve and restore:
-```python
-# ❌ WRONG - dialog disrupts parent window state
-text, ok = QInputDialog.getText(self, "Title", "Prompt")
-
-# ✅ CORRECT - preserve window state around dialogs
-def _show_input_dialog_with_state_preservation(self, title, prompt):
-    current_state = self.windowState()
-    text, ok = QInputDialog.getText(self, title, prompt)
-    # Restore window state after dialog
-    if current_state & Qt.WindowFullScreen:
-        self.setWindowState(Qt.WindowFullScreen)
-    return text, ok
-```
-
-**⚠️ Additional anti-pattern**: Never call `show()` after `setWindowFlag()` operations:
-```python
-# ❌ WRONG - causes window to minimize
-self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-self.show()  # This breaks window state
-
-# ✅ CORRECT - flag changes without show()
-self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-```
-
-### Alert Priority Logic
-The system has **strict priority ordering**: `Active > Missed > Open`
-- Active alerts force window maximized + always-on-top
-- Snooze functionality temporarily disables always-on-top behavior
-- Check `has_unsnooze_alerts()` before forcing window prominence
+**⚠️ OBSOLETE: Old tree widget anti-patterns**
+The complex window state preservation code from V1 is **no longer needed** in V2:
+- No tree widgets that cause window movement
+- No expand/collapse operations that disrupt state
+- Clean card-based design eliminates window state issues
 
 ### Data Storage Pattern
 Settings use **dual-location strategy**:
@@ -83,49 +79,64 @@ Settings use **dual-location strategy**:
 # Use virtual environment Python (critical!)
 .venv\Scripts\python.exe main.py
 
-# Install dependencies in venv
-.venv\Scripts\pip install -r requirements.txt
+# Install PyQt6 dependencies
+.venv\Scripts\pip install PyQt6
 
 # Create shortcuts (Windows integration)
 .venv\Scripts\python.exe install_shortcuts.py
 ```
 
-### Testing Multi-PC Sync
+### V2 UI Development
 ```bash
-# Test shared storage (Google Drive, network drives)
-# Edit settings.json to point data_folder to shared location
-# Run multiple instances from different folders pointing to same data path
+# Test modern UI in different resolutions
+# UI scales well from 1200x800 minimum to 4K displays
+# Cards auto-wrap in responsive 3-column grid
+
+# Color testing - status cards update dynamically
+# Test with different manifest statuses to see color changes
 ```
 
-### Debugging Audio Issues
-```bash
-# Voice synthesis testing
-.venv\Scripts\python.exe -c "import pyttsx3; engine = pyttsx3.init(); engine.say('test'); engine.runAndWait()"
+## 🎯 V2 Component Architecture
 
-# Test WAV file playback
-.venv\Scripts\python.exe -c "from PyQt5.QtMultimedia import QSound; QSound.play('resources/alert.wav')"
+### Modern Card System
+- **StatusCard class**: Self-contained widgets with status-based styling
+- **Grid layout**: Responsive 3-column arrangement with auto-wrapping
+- **Dynamic updates**: Cards recreated on data refresh, no state issues
+- **TV optimized**: Large fonts and high contrast for warehouse displays
+
+### Simplified Data Flow
+```python
+# V2 data flow - clean and simple
+populate_data() → create cards → update summary bar
+# No complex tree operations, no window state preservation needed
 ```
 
-## 🎯 Component Integration Points
+### Acknowledgment System (Stubbed)
+- Current V2 shows placeholder dialog
+- Ready for incremental acknowledgment feature development
+- Will integrate with existing logger module when implemented
 
-### System Tray ↔ Main Window
-- **Enhanced tray menu** with complete application control (Ticket 19 implementation)
-- **Dynamic menu updates**: Snooze enabled only when alerts active, monitor switching with current indicator
-- **Smart monitor switching**: Creates dynamic submenus based on `QApplication.screens()`
-- **Context-aware behavior**: Menu items enable/disable based on application state
-- All main window functions accessible via right-click tray context menu
+## 📝 V2 Code Conventions
 
-### Snooze System ↔ Audio/Visual
-- Snooze affects **both** WAV alerts (`sound_handler.py`) and TTS announcements (`pyttsx3`)
-- Window management respects snooze state - no forced maximization when snoozed
-- Snooze timers automatically re-enable alerts when expired
+### PyQt6 Resource Loading
+```python
+# Always check resource existence before loading
+icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
+if os.path.exists(icon_path):
+    self.setWindowIcon(QIcon(icon_path))
+```
 
-### Settings ↔ Multi-PC Sync
-- Settings validation occurs in real-time with visual indicators (green/orange/red)
-- Path changes immediately affect `get_config_path()` and `get_acknowledgments_path()`
-- Google Drive Desktop compatibility requires polling file timestamps for external changes
-
-## 📝 Code Conventions Specific to This Project
+### Modern Styling Approach
+```python
+# Use f-strings for dynamic CSS
+self.setStyleSheet(f"""
+    StatusCard {{
+        background-color: {bg_color};
+        border: 2px solid {border_color};
+        border-radius: 12px;
+    }}
+""")
+```
 
 ### Error Handling Pattern
 ```python
@@ -137,29 +148,26 @@ except Exception:
     pass  # Silent backup failure acceptable
 ```
 
-### Time Display Formatting
-- Use natural language for TTS: `"eleven thirty"` not `"11:30"`
-- Digital display uses 12-hour format with `strftime('%I:%M %p')`
-- Manifest times stored as `"HH:MM"` 24-hour format internally
-
-### PyQt5 Resource Loading
-```python
-# Always check resource existence before loading
-icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
-if os.path.exists(icon_path):
-    self.setWindowIcon(QIcon(icon_path))
-```
-
 ## 🔄 Deployment Architecture
 
 - **Production**: Users run `INSTALL.bat` which clones from GitHub and sets up virtual environment
-- **Updates**: Same `INSTALL.bat` detects existing Git repo and pulls latest changes
+- **Updates**: Same `INSTALL.bat` detects existing Git repo and pulls latest changes  
 - **Windows Integration**: Desktop shortcuts point to `launch_manifest_alerts_silent.bat`
 - **Multi-PC**: Shared data folders enable real-time acknowledgment sync across warehouse PCs
 
-## 📚 Key Files for Understanding Context
+## 📚 Key Files for V2 Context
 
-- **`tickets.md`**: Complete feature development history and architectural decisions
-- **`alert_display.py`**: Main UI component with all interaction patterns
-- **`INSTALL.bat`**: Deployment strategy and dependency management
+- **`v2.md`**: V2 rebuild log and development history
+- **`alert_display.py`**: Modern card-based UI (400 lines vs 1400+ in V1)
+- **`main.py`**: PyQt6 entry point with Windows integration
+- **`requirements.txt`**: Updated for PyQt6 dependencies
 - **`settings_manager.py`**: Configurable storage and validation patterns
+
+## 🚫 Obsolete V1 Patterns (Do Not Use)
+
+- ~~Tree widget operations and expand/collapse anti-patterns~~
+- ~~Complex window state preservation code~~
+- ~~PyQt5 imports and old Qt APIs~~
+- ~~Snooze system complexity (removed in V2)~~
+- ~~Audio/TTS integration (simplified in V2)~~
+- ~~1400+ line monolithic UI class~~

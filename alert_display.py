@@ -1,1664 +1,2297 @@
-import pyttsx3
-import threading
+"""
+Manifest Alerts V2 - SpaceX-Style Mission Control Display
+Modern, professional TV display for warehouse operations
+"""
+
 import sys
 import json
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTreeWidget, QTreeWidgetItem, QPushButton, QHBoxLayout, QFrame, QSizePolicy
-from PyQt5.QtGui import QColor, QFont, QIcon
-from PyQt5.QtCore import Qt, QTimer
-from scheduler import get_manifest_status
-from data_manager import load_config
-from settings_manager import get_settings_manager
+import os
+import csv
+import random
 from datetime import datetime, timedelta
-from PyQt5.QtWidgets import QStyle
-from PyQt5.QtMultimedia import QSound
-import os, shutil
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QGridLayout, QFrame, QPushButton,
+                             QMessageBox, QScrollArea, QApplication, QDialog,
+                             QLineEdit, QDialogButtonBox, QFormLayout, QFileDialog, QComboBox)
+from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtCore import QUrl
+import os
+import json
+import sys
 
-# Backup current file for Ticket 4 refactor
-backup_path = os.path.join(os.path.dirname(__file__), 'alert_display.ticket4.bak.py')
-if not os.path.exists(backup_path):
-    shutil.copyfile(__file__, backup_path)
-
-class AlertDisplay(QWidget):
-    def __init__(self):
-        super().__init__()        # Start with normal stacking (not always-on-top)
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
-        self.setWindowTitle("Manifest Alerts")
-        self.resize(int(350 * 1.25), int(250 * 1.5 * 1.25))  # height increased by 25%
-        # Set window icon
-        icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-
-        layout = QVBoxLayout()
-        # Ultra-slim margins and spacing for compact UI
-        layout.setContentsMargins(4, 2, 4, 2)       
-        
-        layout.setSpacing(2)
-        
-        # Combined clock and message bar in horizontal layout
-        self.clock_message_bar = QFrame()
-        self.clock_message_bar.setFixedHeight(90)  # Increased height for large clock font
-        self.clock_message_bar.setStyleSheet("background-color: rgba(0, 0, 0, 0.1);")  # Subtle background
-        
-        # Horizontal layout for clock and message
-        clock_message_layout = QHBoxLayout(self.clock_message_bar)
-        clock_message_layout.setContentsMargins(15, 2, 15, 2)  # Reduced padding
-        clock_message_layout.setSpacing(40)  # Space between clock and message
-        
-        # Clock label on the left
-        self.clock_label = QLabel()
-        self.clock_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        digital_font = QFont('Segoe UI', 48, QFont.Bold)
-        self.clock_label.setFont(digital_font)
-        self.clock_label.setStyleSheet("""
-            color: white;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            padding: 8px 12px;
-            margin: 2px;
-        """)
-        self.clock_label.setMinimumWidth(200)  # Ensure consistent clock width
-        
-        # Combined message label on the right
-        self.combined_message_label = QLabel()
-        self.combined_message_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        message_font = QFont('Segoe UI', 18, QFont.Bold)
-        self.combined_message_label.setFont(message_font)
-        self.combined_message_label.setStyleSheet("""
-            color: white;
-            background: transparent;
-            padding: 2px;
-        """)
-        self.combined_message_label.setWordWrap(True)  # Allow text wrapping
-        
-        # Add to horizontal layout with proper spacing
-        clock_message_layout.addWidget(self.clock_label, 0)  # Clock takes minimum space
-        clock_message_layout.addStretch(1)  # Flexible space in middle for centering effect
-        clock_message_layout.addWidget(self.combined_message_label, 2)  # Message takes more space
-        clock_message_layout.addStretch(1)  # Flexible space at end for balance
-        
-        layout.addWidget(self.clock_message_bar)
-        # Manifest list as collapsible tree
-        from PyQt5.QtWidgets import QAbstractItemView
-        self.tree_widget = QTreeWidget()
-        self.tree_widget.setFont(QFont('Segoe UI', 16))
-        self.tree_widget.setHeaderHidden(True)
-        self.tree_widget.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tree_widget.setSelectionBehavior(QAbstractItemView.SelectRows)
-        # Use default expand/collapse icons
-        layout.addWidget(self.tree_widget, 1)
-        # Double-click to acknowledge
-        self.tree_widget.itemDoubleClicked.connect(lambda item, col: self.acknowledge_selected())
-
-        # Bottom control bar layout
-        btn_layout = QHBoxLayout()
-        # Core actions on left
-        self.ack_btn = QPushButton("Acknowledge")
-        self.ack_btn.clicked.connect(self.acknowledge_selected)
-        btn_layout.addWidget(self.ack_btn)
-        self.reload_btn = QPushButton("Reload Config")
-        self.reload_btn.clicked.connect(self.reload_config)
-        btn_layout.addWidget(self.reload_btn)
-        self.collapse_btn = QPushButton("Collapse All")
-        self.collapse_btn.clicked.connect(self.collapse_all)
-        btn_layout.addWidget(self.collapse_btn)
-        self.expand_btn = QPushButton("Expand All")
-        self.expand_btn.clicked.connect(self.expand_all)
-        btn_layout.addWidget(self.expand_btn)
-        
-        self.settings_btn = QPushButton("⚙ Settings")
-        self.settings_btn.setToolTip("Configure Settings (Acknowledgment Name, Data Storage)")
-        self.settings_btn.clicked.connect(self.show_settings)
-        btn_layout.addWidget(self.settings_btn)
-        
-        # Spacer to push secondary actions to right
-        btn_layout.addStretch()
-        # Secondary actions on right
-        self.snooze_btn = QPushButton("Snooze")
-        self.snooze_btn.clicked.connect(self.snooze_alerts)
-        self.snooze_btn.hide()
-        btn_layout.addWidget(self.snooze_btn)
-        self.monitor_btn = QPushButton("⇔ Switch Monitor")
-        self.monitor_btn.setToolTip("Switch Monitor")
-        self.monitor_btn.clicked.connect(self.switch_monitor)
-        btn_layout.addWidget(self.monitor_btn)
-        
-        self.full_btn = QPushButton()
-        self.full_btn.setToolTip("Toggle Fullscreen/Maximize")
-        self.full_btn.setIcon(self.style().standardIcon(QStyle.SP_TitleBarMaxButton))
-        self.full_btn.clicked.connect(self.toggle_fullscreen)
-        # Always show fullscreen button for warehouse TV displays
-        btn_layout.addWidget(self.full_btn)
-        layout.addLayout(btn_layout)
-        self.setLayout(layout)        # Timers and sound (start only once)
-        # Snooze tracker
-        self.snooze_until = None
-        self.flashing_items = []
-        self.flashing_on = True
-        self.sound = None
-        
-        # Background flashing for alerts
-        self.background_flash_state = 0  # 0=normal, 1=red, 2=white, 3=black
-        self.background_flashing = False
-        self.flash_timer = QTimer(self)
-        self.flash_timer.timeout.connect(self.toggle_flashing)
-        self.flash_timer.start(700)  # 0.7 second flash for optimal visual impact
-        self.clock_timer = QTimer(self)
-        self.clock_timer.timeout.connect(self.update_clock_and_countdown)
-        self.clock_timer.start(1000)
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self.refresh_list)
-        self.refresh_timer.start(30000)  # Default 30 seconds
-        self.current_date = datetime.now().date()
-        
-        # Dedicated acknowledgment file monitor for ultra-fast sync
-        self.ack_monitor_timer = QTimer(self)
-        self.ack_monitor_timer.timeout.connect(self.check_acknowledgment_changes)
-        self.ack_monitor_timer.start(1000)  # Check every 1 second for acknowledgment changes
-        
-        # Track refresh state for adaptive timing during multi-PC sync
-        self.fast_refresh_active = False
-        self.last_ack_check_time = None
-          # Initialize speech timer before first update
-        self.speech_timer = QTimer(self)
-        self.speech_timer.timeout.connect(self.speak_active_alert)
-        self.last_spoken_time = None
-          # Speech ticker animation for combined message
-        self.ticker_text = ""
-        self.countdown_text = ""  # Separate countdown text
-        self.ticker_position = 0
-        self.ticker_timer = QTimer(self)
-        self.ticker_timer.timeout.connect(self.update_combined_message)
-        self.ticker_timer.start(100)  # Update every 100ms for smooth scrolling
-        
-        # Flag to apply auto-expansion only once
-        self.first_populate = True
-        self.populate_list()
-        self.update_clock_and_countdown()
-        
-        # Initialize acknowledgment file timestamp after first populate
-        from settings_manager import get_settings_manager
-        settings = get_settings_manager()
-        ack_path = settings.get_acknowledgments_path()
-        if os.path.exists(ack_path):
-            try:
-                self.last_ack_check_time = os.path.getmtime(ack_path)
-            except Exception:
-                self.last_ack_check_time = None        # System tray integration with enhanced menu
-        from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
-        icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
-        self.tray_icon = QSystemTrayIcon(
-            QIcon(icon_path) if os.path.exists(icon_path) else self.windowIcon(), parent=self
-        )
-        self.tray_icon.setToolTip("Manifest Alerts")
-        
-        # Create enhanced tray menu with all main functions
-        self.tray_menu = QMenu()
-        self._create_tray_menu()
-        self.tray_icon.setContextMenu(self.tray_menu)
-        self.tray_icon.activated.connect(lambda r: self._toggle_visibility() if r == QSystemTrayIcon.Trigger else None)
-        self.tray_icon.show()
-
-    def speak_active_alert(self):
-        # Analyze all alerting manifests to create a smart, consolidated announcement
-        alerting_groups = []
-        has_active = False
-        has_missed = False
-        
-        for i in range(self.tree_widget.topLevelItemCount()):
-            group = self.tree_widget.topLevelItem(i)
-            time_str = group.text(0)
-            group_has_active = False
-            group_has_missed = False
-            
-            # Check what types of alerts this time group has
-            for j in range(group.childCount()):
-                child_text = group.child(j).text(0)
-                if child_text.endswith(' - Active'):
-                    group_has_active = True
-                    has_active = True
-                elif child_text.endswith(' - Missed'):
-                    group_has_missed = True
-                    has_missed = True
-            
-            # If this group has any alerts, add it to our list
-            if group_has_active or group_has_missed:
-                alerting_groups.append({
-                    'time': time_str,
-                    'has_active': group_has_active,
-                    'has_missed': group_has_missed
-                })
-        
-        if not alerting_groups:
-            # No alerting manifests found
-            self.last_spoken_time = None
-            return
-          # Create smart consolidated announcement based on situation
-        if len(alerting_groups) == 1:
-            # Single time group - speak the specific time normally
-            single_group = alerting_groups[0]
-            self._trigger_speech(single_group['time'])
-        else:
-            # Multiple time groups - give consolidated announcement
-            if has_active and has_missed:
-                # Mix of active and missed
-                text = "Multiple Missed and Active Manifests. Please acknowledge"
-            elif has_missed:
-                # All missed
-                text = "Multiple missed manifests. Please acknowledge"
-            else:
-                # All active
-                text = "Multiple manifests Active. Please acknowledge"
-            
-            # Update ticker and speak the consolidated message
-            self.set_ticker_text(text)
-            threading.Thread(target=self._speak, args=(text,), daemon=True).start()
-        self.last_spoken_time = None
-
-    def _trigger_speech(self, time_str):
-        # Convert '13:40' to 'one forty' or '15:03' to 'three oh three'
+# Import with error handling
+try:
+    from scheduler import get_manifest_status
+    from data_manager import load_config
+    from settings_manager import get_settings_manager
+except ImportError:
+    # Fallback if imports fail - should not happen in production
+    print("WARNING: Failed to import core modules, using minimal fallback")
+    
+    def get_manifest_status(time_str, now):
+        # Emergency fallback - try basic time comparison
+        from datetime import datetime, timedelta
         try:
-            hour, minute = map(int, time_str.split(':'))
-            hour_12 = hour % 12 or 12
-            spoken_hour = self._number_to_words(hour_12)
-            
-            # Handle minutes properly - if 0-9, say "oh X", otherwise normal
-            if minute == 0:
-                spoken_minute = "o'clock"
-            elif minute < 10:
-                spoken_minute = f"oh {self._number_to_words(minute)}"
+            today = now.date()
+            manifest_time = datetime.strptime(time_str, "%H:%M").replace(year=today.year, month=today.month, day=today.day)
+            if now >= manifest_time + timedelta(minutes=30):
+                return "Missed"
+            elif now >= manifest_time - timedelta(minutes=2):
+                return "Active"
             else:
-                spoken_minute = self._number_to_words(minute)
-            
-            if minute == 0:
-                spoken_time = f"{spoken_hour} o'clock"
-            else:
-                spoken_time = f"{spoken_hour} {spoken_minute}"
-            
-            # Check how late the manifest is
-            from datetime import datetime
-            now = datetime.now()
-            manifest_time = datetime.strptime(time_str, '%H:%M').replace(
-                year=now.year, month=now.month, day=now.day
-            )
-            minutes_late = int((now - manifest_time).total_seconds() / 60)
-            
-            if minutes_late >= 30:  # Missed (30+ minutes late)
-                text = f"Manifest Missed, at {spoken_time}. Manifest is {minutes_late} minutes Late"
-            else:  # Active (0-29 minutes late)
-                text = f"Manifest at {spoken_time}"
-                
-        except Exception:
-            text = f"Manifest"
-        
-        # Update ticker and speak
-        self.set_ticker_text(text)
-        threading.Thread(target=self._speak, args=(text,), daemon=True).start()
+                return "Pending"
+        except:
+            return "Unknown"
+    
+    def load_config():
+        return {"manifests": []}
+    
+    def get_settings_manager():
+        class DummySettings:
+            def get_acknowledgments_path(self):
+                return "ack.json"
+        return DummySettings()
 
-    def _speak(self, text):
-        try:
-            import time
-            engine = pyttsx3.init()
-            # Use Zira voice (better quality female voice)
-            voices = engine.getProperty('voices')
-            if len(voices) > 1:
-                engine.setProperty('voice', voices[1].id)  # Zira (female)
-            # Get current speech rate and reduce by 20%
-            rate = engine.getProperty('rate')
-            engine.setProperty('rate', int(rate * 0.9))  # 20% slower
-              # Handle pause by splitting on period and adding delay
-            if '. ' in text:
-                parts = text.split('. ')
-                for i, part in enumerate(parts):
-                    if part.strip():  # Skip empty parts
-                        engine.say(part)
-                        engine.runAndWait()
-                        if i < len(parts) - 1:  # Don't pause after the last part
-                            time.sleep(1)  # 1 second pause between parts
-            else:
-                engine.say(text)
-                engine.runAndWait()
-        except Exception:
-            pass
 
-    def _number_to_words(self, n):
-        # Simple number to words for 0-59
-        words = [
-            'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-            'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen',
-            'twenty', 'twenty one', 'twenty two', 'twenty three', 'twenty four', 'twenty five', 'twenty six', 'twenty seven', 'twenty eight', 'twenty nine',
-            'thirty', 'thirty one', 'thirty two', 'thirty three', 'thirty four', 'thirty five', 'thirty six', 'thirty seven', 'thirty eight', 'thirty nine',
-            'forty', 'forty one', 'forty two', 'forty three', 'forty four', 'forty five', 'forty six', 'forty seven', 'forty eight', 'forty nine',
-            'fifty', 'fifty one', 'fifty two', 'fifty three', 'fifty four', 'fifty five', 'fifty six', 'fifty seven', 'fifty eight', 'fifty nine'
-        ]
-        return words[n] if 0 <= n < 60 else str(n)
-
-    def _toggle_visibility(self):
-        """Toggle the visibility of the window - Disabled for warehouse TV display."""
-        # In warehouse environment, window should always remain visible
-        # Just bring to front and focus instead of hiding
-        self._bring_to_front()
-        if self.isMinimized():
-            self.setWindowState(Qt.WindowMaximized)
-
-    def reload_config(self):
-        # Reset file change tracking when reloading config (for path changes)
-        self.last_ack_check_time = None
+class StatusCard(QFrame):
+    """Modern status card widget"""
+    
+    def __init__(self, time_str, status="OPEN", parent_display=None):
+        super().__init__()
+        self.time_str = time_str
+        self.status = status
+        self.manifests = []
+        self.parent_display = parent_display  # Reference to main display for acknowledgments
         
-        # Store current window state before reloading
-        was_visible = self.isVisible()
-        current_state = self.windowState()
+        self.setMinimumSize(1200, 80)  # Reduced minimum height significantly
+        self.setFrameStyle(QFrame.Shape.Box)
+        self.setup_ui()
+        self.update_styling()
         
-        self.populate_list()
-        self.update_clock_and_countdown()
+        # Remove card-level hover tracking - we'll handle individual carrier hover instead
         
-        # Restore window visibility and state after reload - state-aware
-        if was_visible:
-            if current_state & Qt.WindowMaximized:
-                self.setWindowState(Qt.WindowMaximized)
-            elif current_state & Qt.WindowFullScreen:
-                self.setWindowState(Qt.WindowFullScreen)
-            else:
-                self.setWindowState(Qt.WindowNoState)
-            
-            # Use state-aware visibility restoration
-            if current_state & Qt.WindowFullScreen:
-                # Don't call show() in fullscreen
-                self.raise_()
-                self.activateWindow()
-            elif current_state & Qt.WindowMaximized:
-                # Don't call show() in maximized
-                self.raise_()
-                self.activateWindow()
-            else:
-                # Normal state - safe to show()
-                self.show()
-                self.raise_()
-                self.activateWindow()
+        # Make card clickable (but we'll override for time header double-click)
+        self.mousePressEvent = self.card_clicked
+    
+    def setup_ui(self):
+        layout = QHBoxLayout()  # Main horizontal layout
+        layout.setContentsMargins(10, 3, 10, 3)  # Even smaller margins - reduced from 15,5 to 10,3
+        layout.setSpacing(15)  # Reduced spacing between sections
         
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.information(self, "Config Reloaded", "Configuration reloaded from disk.")
-    def update_clock_and_countdown(self):
-        now = datetime.now()
-        # Skip updates (maximize/hide logic) during snooze period
-        if self.snooze_until and now < self.snooze_until:
-            return        # Day-change logic
-        if now.date() != self.current_date:
-            self.current_date = now.date()
-            self.populate_list()
+        # Left side - Time and Status (fixed width for consistent alignment)
+        time_status_layout = QVBoxLayout()
+        time_status_layout.setSpacing(0)  # No spacing in time section
+        time_status_layout.setContentsMargins(0, 0, 0, 0)  # No margins
         
-        self.clock_label.setText(now.strftime('%H:%M'))
-        
-        # Update status band and background based on most urgent status
-        self.update_visual_alerts()# If any Active or Missed exists in tree, focus group and maximize
-        any_alerting = self.has_active_alerts()
-        if any_alerting:
-            # Collapse all groups except the alerting ones, bring window to front
-            for i in range(self.tree_widget.topLevelItemCount()):
-                group = self.tree_widget.topLevelItem(i)
-                has_alerting = any(
-                    ("Active" in group.child(j).text(0) or "Missed" in group.child(j).text(0))
-                    for j in range(group.childCount())
-                )
-                group.setExpanded(has_alerting)
-            
-            # Only force window state if alerts are NOT snoozed
-            if self.has_unsnooze_alerts():
-                # Preserve current window state while ensuring visibility
-                current_state = self.windowState()
-                
-                # Only maximize if not in fullscreen and not already maximized
-                if not (current_state & Qt.WindowFullScreen) and not (current_state & Qt.WindowMaximized):
-                    self.setWindowState(Qt.WindowMaximized)
-                
-                # Ensure window is visible and active without disrupting state
-                if not self.isVisible():
-                    current_state = self.windowState()
-                    # Only call show() if not in fullscreen/maximized
-                    if not (current_state & Qt.WindowFullScreen) and not (current_state & Qt.WindowMaximized):
-                        self.show()
-                self.raise_()
-                self.activateWindow()
-                
-                # Set always-on-top flag only if not already set
-                if not (self.windowFlags() & Qt.WindowStaysOnTopHint):
-                    self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-                    # Don't call show() after setting flags - it can cause minimization
-                
-                # Play sound immediately on active
-                self.check_and_play_sound()
-            # Continue to check for late message (don't return early)
-        # Check for any late manifests (past due but not acknowledged)
-        late_manifest = None
-        max_late_minutes = 0
-        for i in range(self.tree_widget.topLevelItemCount()):
-            group = self.tree_widget.topLevelItem(i)
-            raw_text = group.text(0)
-            if raw_text.startswith('+ ') or raw_text.startswith('− '):
-                time_str = raw_text[2:]
-            else:
-                time_str = raw_text
-            # Check if this time has any missed or active manifests
-            has_unacknowledged = any(
-                child_text.endswith(' - Active') or child_text.endswith(' - Missed')
-                for j in range(group.childCount())
-                for child_text in [group.child(j).text(0)]
-            )
-            if has_unacknowledged:
-                manifest_time = datetime.strptime(time_str, '%H:%M').replace(
-                    year=now.year, month=now.month, day=now.day
-                )
-                if now > manifest_time:  # Past due
-                    minutes_late = int((now - manifest_time).total_seconds() / 60)
-                    if minutes_late > max_late_minutes:
-                        max_late_minutes = minutes_late
-                        late_manifest = time_str
-        if late_manifest and max_late_minutes > 0:
-            # Show late manifest message
-            self.set_countdown_text(f"Manifest Late by {max_late_minutes} mins")
-            return
-        
-        # If no late manifests but we have alerting manifests, clear countdown
-        if any_alerting:
-            self.set_countdown_text("")
-            return
-        
-        # Clear ticker when no alerts are active
-        if not any_alerting:
-            self.set_ticker_text("")
-        
-        # Find next "Open" entry in the tree
-        next_time = None
-        for i in range(self.tree_widget.topLevelItemCount()):
-            group = self.tree_widget.topLevelItem(i)
-            # Strip expand/collapse prefix when parsing time
-            raw_text = group.text(0)
-            if raw_text.startswith('+ ') or raw_text.startswith('− '):
-                time_str = raw_text[2:]
-            else:
-                time_str = raw_text
-            for j in range(group.childCount()):
-                child_text = group.child(j).text(0)
-                if child_text.endswith(' - Open'):
-                    next_time = datetime.strptime(time_str, '%H:%M').replace(
-                        year=now.year, month=now.month, day=now.day
-                    )
-                    break
-            if next_time:
-                break
-                
-        if next_time:
-            delta = next_time - now
-            hours, remainder = divmod(int(delta.total_seconds()), 3600)
-            minutes, _ = divmod(remainder, 60)
-            
-            # Format the message nicely
-            if hours > 0:
-                time_msg = f"{hours} hr {minutes} mins"
-            else:                time_msg = f"{minutes} mins"
-            
-            self.set_countdown_text(f"Next Manifest in {time_msg}")
-        else:
-            self.set_countdown_text("")
-        
-        # Disable always-on-top when no alerts OR when snoozed (but preserve window visibility)
-        if not any_alerting or (self.snooze_until and datetime.now() < self.snooze_until):
-            # Only change the flag if it's currently set to avoid unnecessary updates
-            if self.windowFlags() & Qt.WindowStaysOnTopHint:
-                self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
-                # Don't call show() after setting flags - preserve current state
-            
-            # When snoozed, don't force window to front - allow user to minimize
-            if not (self.snooze_until and datetime.now() < self.snooze_until):
-                # Only ensure visibility when NOT snoozed - use state-aware method
-                if self.isVisible(): 
-                    current_state = self.windowState()
-                    # Avoid show() in fullscreen/maximized modes
-                    if not (current_state & Qt.WindowFullScreen) and not (current_state & Qt.WindowMaximized):
-                        self.show()
-                    self.raise_()
-                    self.activateWindow()
-            
-        # Check sound without altering group expansion (retain manual state)
-        self.check_and_play_sound()
-
-    def update_visual_alerts(self):
-        """Update status band and background based on most urgent manifest status"""
-        # Priority order: Active > Missed > Open > All Acknowledged
-        
-        # Check for Active manifests (highest priority - red)
-        has_active = any(
-            "Active" in self.tree_widget.topLevelItem(i).child(j).text(0)
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-        )
-        
-        # Check for Missed manifests (second priority - dark red)
-        has_missed = any(
-            "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0)
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-            if not ("Acknowledged" in self.tree_widget.topLevelItem(i).child(j).text(0))
-        )
-        
-        # Check for Open manifests (third priority - blue)
-        has_open = any(
-            "Open" in self.tree_widget.topLevelItem(i).child(j).text(0)
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-        )        # Determine colors based on status
-        if has_active:
-            clock_bg_color = "rgba(255, 0, 0, 0.8)"  # Semi-transparent red
-            message_bar_color = "rgb(255, 0, 0)"  # Red for message bar
-            self.background_flashing = True
-        elif has_missed:
-            clock_bg_color = "rgba(139, 0, 0, 0.8)"  # Semi-transparent dark red
-            message_bar_color = "rgb(139, 0, 0)"  # Dark red for message bar
-            self.background_flashing = True
-        elif has_open:
-            clock_bg_color = "rgba(38, 132, 255, 0.8)"  # Semi-transparent blue
-            message_bar_color = "rgb(38, 132, 255)"  # Blue for message bar
-            self.background_flashing = False
-        else:
-            clock_bg_color = "rgba(0, 200, 0, 0.8)"  # Semi-transparent green
-            message_bar_color = "rgb(0, 200, 0)"  # Green for message bar
-            self.background_flashing = False
-        
-        # Update clock background
-        self.clock_label.setStyleSheet(f"""
-            color: white;
-            background: {clock_bg_color};
-            border-radius: 8px;
-            padding: 10px;
-            margin: 5px;
+        # Combined time and status header
+        self.time_status_label = QLabel(f"{self.time_str} - {self.status}")
+        self.time_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.time_status_label.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))  # Increased from 24 to 28
+        self.time_status_label.setFixedWidth(280)  # Consistent fixed width for alignment
+        self.time_status_label.mouseDoubleClickEvent = self.time_header_double_clicked
+        # Set up hover effects with mouse events
+        self.time_status_label.enterEvent = self.time_header_hover_enter
+        self.time_status_label.leaveEvent = self.time_header_hover_leave
+        self.time_status_label.setStyleSheet("""
+            QLabel {
+                padding: 2px;
+                border-radius: 8px;
+                background: transparent;
+            }
         """)
+        time_status_layout.addWidget(self.time_status_label)
+        time_status_layout.addStretch()
         
-        # Update message bar background
-        self.clock_message_bar.setStyleSheet(f"background-color: {message_bar_color};")
+        layout.addLayout(time_status_layout)
         
-        # Set background styling based on alert status
-        if self.background_flashing:
-            # Don't set static styles when background is flashing - let toggle_flashing handle it
-            pass
-        else:
-            # Set clean background for normal state (no active/missed alerts)
-            self.setStyleSheet("""
-                QWidget {{
-                    background-color: #f5f5f5;
-                }}
-                QTreeWidget {{
-                    background-color: white;
-                    color: black;
-                    border: 1px solid #ccc;
-                }}
-                QPushButton {{
-                    background-color: white;
-                    color: black;
-                    border: 1px solid #999;
-                    padding: 8px 12px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }}
-                QPushButton:hover {{
-                    background-color: #e0e0e0;
-                }}
-            """)
-            # Also reset tree widget to normal styling when not flashing
-            self.tree_widget.setStyleSheet("""
-                QTreeWidget {{
-                    background-color: white;
-                    color: black;
-                    border: 1px solid #ccc;
-                }}
-            """)
-
-    def refresh_list(self):
-        """Refresh data and adapt refresh rate for multi-PC synchronization"""
-        # Note: Acknowledgment changes are now monitored by dedicated 1-second timer
-        # This method focuses on regular UI updates and timing adjustments
+        # Center - Manifest details (carriers) - takes remaining space
+        center_layout = QVBoxLayout()
+        center_layout.setSpacing(0)  # No spacing in center section
+        center_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Update UI components
-        self.check_and_play_sound()
-        self.update_clock_and_countdown()
+        # Create a horizontal layout for carriers and acknowledgment side by side
+        carriers_ack_layout = QHBoxLayout()
+        carriers_ack_layout.setSpacing(15)  # Reduced spacing between carriers and ack  
+        carriers_ack_layout.setContentsMargins(0, 0, 0, 0)  # No margins
         
-        # Adaptive refresh timing for multi-PC sync
-        self.update_refresh_timing()
+        # Left part: carriers (will be recreated as clickable labels)
+        self.carriers_widget = QWidget()
+        self.carriers_layout = QVBoxLayout(self.carriers_widget)
+        self.carriers_layout.setContentsMargins(0, 0, 0, 0)
+        self.carriers_layout.setSpacing(1)  # Extremely tight - reduced from 2 to 1
+        carriers_ack_layout.addWidget(self.carriers_widget)
+        
+        # Right part: acknowledgment (consistent fixed width)
+        ack_widget = QWidget()
+        ack_widget.setFixedWidth(250)  # Consistent fixed width for all cards
+        ack_widget.setStyleSheet("background: transparent;")
+        
+        ack_layout = QVBoxLayout(ack_widget)
+        ack_layout.setContentsMargins(0, 0, 0, 0)  # No margins
+        ack_layout.setSpacing(0)  # No spacing between status and details
+        
+        # Acknowledgment status text
+        self.ack_status_label = QLabel("")
+        self.ack_status_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))  # Reduced from 22 to 18 to prevent clipping
+        self.ack_status_label.setStyleSheet("color: #2ed573; background: transparent;")
+        self.ack_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # Left align
+        ack_layout.addWidget(self.ack_status_label)
+        
+        # Reason/details text
+        self.ack_details_label = QLabel("")
+        self.ack_details_label.setFont(QFont("Segoe UI", 16))  # Reduced from 20 to 16 to prevent clipping
+        self.ack_details_label.setStyleSheet("color: #ffffff; background: transparent;")
+        self.ack_details_label.setWordWrap(True)
+        self.ack_details_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # Left align
+        ack_layout.addWidget(self.ack_details_label)
+        
+        ack_layout.addStretch()
+        carriers_ack_layout.addWidget(ack_widget)
+        # Removed addStretch here to let sections naturally space out
+        
+        center_layout.addLayout(carriers_ack_layout)
+        center_layout.addStretch()
+        
+        layout.addLayout(center_layout)
+        
+        # Remove redundant status bar - card border provides sufficient visual indication
+        self.setLayout(layout)
     
-    def check_acknowledgment_changes(self):
-        """Check for acknowledgment file changes from other PCs and refresh if needed"""
-        from settings_manager import get_settings_manager
-        settings = get_settings_manager()
-        ack_path = settings.get_acknowledgments_path()
+    def update_styling(self):
+        """Update colors based on status - only borders and font colors on black background"""
+        if self.status == "ACTIVE":
+            border_color = "#ff4757"
+            text_color = "#ffffff"
+            status_color = "#ff4757"
+        elif self.status == "MISSED":
+            border_color = "#c44569"
+            text_color = "#ffffff"
+            status_color = "#c44569"
+        elif self.status == "ACKNOWLEDGED":
+            border_color = "#2ed573"
+            text_color = "#ffffff"
+            status_color = "#2ed573"
+        else:  # OPEN
+            border_color = "#3742fa"
+            text_color = "#ffffff"
+            status_color = "#3742fa"
         
-        if not os.path.exists(ack_path):
-            return
-            
-        try:
-            # Get file modification time
-            file_mod_time = os.path.getmtime(ack_path)
-            
-            # If this is first check or file has been modified since last check
-            if self.last_ack_check_time is None or file_mod_time > self.last_ack_check_time:
-                # Only rebuild if not the first check (avoid duplicate initial load)
-                if self.last_ack_check_time is not None:
-                    # Store comprehensive window state before rebuilding
-                    was_visible = self.isVisible()
-                    was_active = self.isActiveWindow()
-                    current_state = self.windowState()
-                    current_pos = self.pos()
-                    current_size = self.size()
-                    
-                    self.populate_list()  # Rebuild list with new acknowledgment data
-                    
-                    # Aggressively restore window state after refresh
-                    if was_visible:
-                        # Force window to be visible and properly positioned
-                        self.setGeometry(current_pos.x(), current_pos.y(), current_size.width(), current_size.height())
-                        
-                        # Restore exact window state first
-                        if current_state & Qt.WindowMaximized:
-                            self.setWindowState(Qt.WindowMaximized)
-                        elif current_state & Qt.WindowFullScreen:
-                            self.setWindowState(Qt.WindowFullScreen)
-                        else:
-                            self.setWindowState(Qt.WindowNoState)
-                        
-                        # State-aware window visibility restoration
-                        if current_state & Qt.WindowFullScreen:
-                            # Don't call show() in fullscreen - it breaks the state
-                            self.raise_()
-                            self.activateWindow()
-                        elif current_state & Qt.WindowMaximized:
-                            # Don't call show() in maximized - it can cause issues
-                            self.raise_()
-                            self.activateWindow()
-                        else:
-                            # Normal state - safe to call show()
-                            self.show()
-                            self.raise_()
-                            self.activateWindow()
-                        
-                        # Extra assurance - force it to stay on top temporarily then remove
-                        if was_active:
-                            # If window was active, ensure it regains focus without flag changes
-                            self.raise_()
-                            self.activateWindow()
-                
-                # Update the timestamp after processing
-                self.last_ack_check_time = file_mod_time
-                    
-        except Exception as e:
-            # Silent failure - don't disrupt operation
-            pass
-    
-    def update_refresh_timing(self):
-        """Adapt refresh timing based on current alert status for multi-PC sync"""
-        # Check if we have any active or missed alerts that need fast sync
-        has_active_alerts = any(
-            ("Active" in self.tree_widget.topLevelItem(i).child(j).text(0) or
-             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0))
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-            if not "Acknowledged" in self.tree_widget.topLevelItem(i).child(j).text(0)
-        )
-        
-        # Determine if we should use fast refresh
-        should_fast_refresh = has_active_alerts
-        
-        # Adaptive acknowledgment monitoring - faster during alerts
-        if should_fast_refresh:
-            # Ultra-fast acknowledgment checking during alerts
-            self.ack_monitor_timer.start(500)  # 0.5 seconds during alerts
-            # Ultra-fast refresh during active/missed alerts for real-time multi-PC sync
-            self.refresh_timer.start(2000)  # 2 seconds for near real-time sync
-            self.fast_refresh_active = True
-        else:
-            # Normal acknowledgment checking in green mode
-            self.ack_monitor_timer.start(2000)  # 2 seconds in normal operation
-            # Faster refresh even in green mode for better acknowledgment sync
-            self.refresh_timer.start(10000)  # 10 seconds in normal operation
-            self.fast_refresh_active = False
-    def check_and_play_sound(self):
-        # Skip alerts during snooze
-        if self.snooze_until and datetime.now() < self.snooze_until:
-            return        # Play and loop sound if any manifest is active or missed (flashing)
-        from PyQt5.QtMultimedia import QSound
-        import os
-        sound_path = os.path.join(os.path.dirname(__file__), 'resources', 'alert.wav')
-        any_alerting = self.has_active_alerts()
-        if any_alerting:
-            if self.sound is None:
-                if os.path.exists(sound_path):
-                    self.sound = QSound(sound_path)
-                    self.sound.setLoops(QSound.Infinite)
-                    self.sound.play()
-            else:
-                # If sound exists but is not playing, play it
-                if not self.sound.isFinished():
-                    pass  # Already playing
-                else:
-                    self.sound.play()            # Start speech timer if not already running
-            if not self.speech_timer.isActive():
-                self.speech_timer.start(20000)  # every 20 seconds
-                self.speak_active_alert()  # speak immediately only when starting timer
-        else:
-            if self.sound:
-                self.sound.stop()
-                self.sound = None
-            # Stop speech timer
-            if self.speech_timer.isActive():
-                self.speech_timer.stop()
-    def acknowledge_selected(self):
-        # Mark selected item or group as acknowledged and stop flashing
-        from PyQt5.QtWidgets import QInputDialog, QMessageBox
-        selected = self.tree_widget.currentItem()
-        if not selected:
-            return        # Group acknowledgment (top-level item selected)
-        if selected.parent() is None:
-            # Strip prefix for manifest_time
-            manifest_time = selected.text(0)
-            if manifest_time.startswith('+ ') or manifest_time.startswith('− '):
-                manifest_time = manifest_time[2:]
-            
-            # Check if this is a missed group (has any missed manifests)
-            has_missed_manifests = any(
-                selected.child(i).text(0).endswith(' - Missed')
-                for i in range(selected.childCount())
-            )
-            
-            # If group has missed manifests, require a note
-            reason = None
-            if has_missed_manifests:
-                reason, ok = self._show_input_dialog_with_state_preservation(
-                    "Missed Group Reason", 
-                    f"This group has missed manifests. Please enter reason for missed manifests at {manifest_time}:"
-                )
-                if not (ok and reason.strip()):
-                    self._show_message_with_state_preservation(
-                        "information", 
-                        "No Reason", 
-                        "Acknowledgment cancelled: reason required for missed manifests."
-                    )
-                    return
-                reason = reason.strip()
-            
-            # Acknowledge each Active/Missed child in the group
-            from logger import log_acknowledgment
-            any_acked = False
-            for i in range(selected.childCount()):
-                child = selected.child(i)
-                text = child.text(0)
-                # Acknowledge any Active or Missed items
-                if text.endswith(' - Active') or text.endswith(' - Missed'):
-                    carrier = text.split(' - ')[0]
-                    status = 'Active' if text.endswith(' - Active') else 'Missed'
-                    try:
-                        # Pass reason for missed items, None for active items
-                        log_reason = reason if status == 'Missed' else None
-                        log_acknowledgment(manifest_time, carrier, status, log_reason)
-                        any_acked = True
-                    except Exception as e:
-                        QMessageBox.warning(self, 'Log Error', f'Failed to log acknowledgment for {carrier}: {e}')
-            
-            if any_acked:
-                # Removed confirmation dialog to prevent fullscreen disruption
-                self.populate_list()
-                self.update_clock_and_countdown()
-                # Trigger immediate refresh for other PCs
-                self.update_refresh_timing()
-                # Force immediate acknowledgment check for ultra-fast sync
-                QTimer.singleShot(100, self.check_acknowledgment_changes)
-                # Preserve window state after acknowledgment
-                self._preserve_window_state_after_ack()
-            return
-        text = selected.text(0)
-        # Only children (manifests) are acknowledgeable
-        parent = selected.parent()
-        if parent is None:
-            return
-        # Parse manifest time from parent and carrier/status from child
-        manifest_time = parent.text(0)
-        if manifest_time.startswith('+ ') or manifest_time.startswith('− '):
-            manifest_time = manifest_time[2:]
-        parts = text.split(' - ')
-        carrier = parts[0] if parts else ''
-        status = parts[1] if len(parts) > 1 else ''
-
-        if "Open" in text:
-            self._show_message_with_state_preservation(
-                "information", 
-                "Cannot Acknowledge", 
-                "You cannot acknowledge an 'Open' manifest. Wait until it is Active or Missed."
-            )
-            return
-
-        if "Missed" in text:
-            # Prompt for missed reason with state preservation
-            reason, ok = self._show_input_dialog_with_state_preservation(
-                "Missed Reason", 
-                "Please enter reason for missed manifest:"
-            )
-            if ok and reason.strip():
-                try:
-                    from logger import log_acknowledgment
-                    log_acknowledgment(manifest_time, carrier, "Missed", reason.strip())
-                except Exception as e:
-                    QMessageBox.warning(self, "Log Error", f"Failed to log acknowledgment: {e}")
-                self.populate_list()
-                self.update_clock_and_countdown()
-                # Trigger immediate refresh for other PCs
-                self.update_refresh_timing()
-                # Force immediate acknowledgment check for ultra-fast sync
-                QTimer.singleShot(100, self.check_acknowledgment_changes)
-                self._preserve_window_state_after_ack()
-            else:
-                self._show_message_with_state_preservation(
-                    "information", 
-                    "No Reason", 
-                    "Acknowledgment cancelled: reason required."
-                )
-            return
-
-        if "Active" in text or "Open" in text:
-            try:
-                from logger import log_acknowledgment
-                log_acknowledgment(manifest_time, carrier, status)
-            except Exception as e:
-                QMessageBox.warning(self, "Log Error", f"Failed to log acknowledgment: {e}")            # Refresh list and countdown
-            self.populate_list()
-            self.update_clock_and_countdown()
-            # Trigger immediate refresh for other PCs
-            self.update_refresh_timing()
-            # Force immediate acknowledgment check for ultra-fast sync
-            QTimer.singleShot(100, self.check_acknowledgment_changes)
-            self._preserve_window_state_after_ack()
-            return
-
-    def populate_list(self):
-        self.tree_widget.clear()
-        self.flashing_items = []
-        # Define custom status colors
-        open_color = QColor(38, 132, 255)   # Jira blue
-        active_color = QColor(255, 0, 0)    # Red
-        missed_color = QColor(139, 0, 0)    # DarkRed
-        ack_color = QColor(0, 200, 0)       # Green
-        ack_late_color = QColor(255, 140, 0) # Orange (Ack Late)
-        config = load_config()
-        manifests = sorted(config.get('manifests', []), key=lambda m: datetime.strptime(m['time'], "%H:%M"))
-        now = datetime.now()
-        today = now.date().isoformat()
-        # Load today's acks from configurable path
-        from settings_manager import get_settings_manager
-        settings = get_settings_manager()
-        ack_path = settings.get_acknowledgments_path()
-        import shutil
-        if os.path.exists(ack_path):
-            try:
-                with open(ack_path, 'r', encoding='utf-8') as f:
-                    ack_data = json.load(f)
-            except Exception as e:
-                # Backup the corrupted file
-                try:
-                    backup_path = ack_path + ".bak"
-                    shutil.copyfile(ack_path, backup_path)
-                except Exception:
-                    pass
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.critical(self, "Log Error", f"Acknowledgment log is invalid and was backed up as {ack_path}.bak: {e}")
-                ack_data = []
-        else:
-            ack_data = []
-        # Build a lookup for today's acks
-        ack_lookup = {}
-        for ack in ack_data:
-            if ack.get('date') == today:
-                key = (ack.get('manifest_time'), ack.get('carrier'))
-                ack_lookup[key] = ack
-
-        if not manifests:
-            # No manifests to display
-            no_item = QTreeWidgetItem(["No manifests loaded. Check your config file."])
-            self.tree_widget.addTopLevelItem(no_item)
-            return
-        # Build tree: group per time
-        for m in manifests:
-            time = m['time']
-            group = QTreeWidgetItem([time])
-            # Make group header selectable
-            group.setFlags(group.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-            # Determine group color: default Open
-            group_color = open_color
-            has_active = False
-            has_missed = False
-            has_open = False
-            has_ack = False
-            has_ack_late = False
-            # Add to tree
-            self.tree_widget.addTopLevelItem(group)
-            for carrier in m.get('carriers', []):
-                    key = (time, carrier)
-                    ack = ack_lookup.get(key)
-                    status = get_manifest_status(time, now)
-                    if ack:
-                        # Always show acknowledged as green, except 'Missed' (Ack Late is orange)
-                        username = ack.get('acknowledged_by', 'Unknown')
-                        if ack['status'] == 'Missed':
-                            reason = ack.get('reason')
-                            if reason:
-                                text = f"{carrier} - Acknowledged Late: {reason} - {username}"
-                            else:
-                                text = f"{carrier} - Acknowledged Late - {username}"
-                            color = ack_late_color
-                            has_ack_late = True
-                        else:
-                            text = f"{carrier} - Acknowledged - {username}"
-                            color = ack_color
-                            has_ack = True
-                    else:
-                        if status == 'Pending':
-                            text = f"{carrier} - Open"
-                            color = open_color
-                            has_open = True
-                        elif status == 'Active':
-                            text = f"{carrier} - Active"
-                            color = active_color
-                            has_active = True
-                        else:
-                            text = f"{carrier} - Missed"
-                            color = missed_color
-                            has_missed = True
-                    child = QTreeWidgetItem([text])
-                    child.setFlags(child.flags() | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                    child.setForeground(0, color)
-                    group.addChild(child)
-                    # Flash Active and Missed items (both trigger alerts and can be snoozed)
-                    if 'Active' in text or 'Missed' in text:
-                        self.flashing_items.append(child)
-            # After adding children, set group header color by priority
-            if has_ack_late:
-                group_color = ack_late_color
-            elif has_ack:
-                group_color = ack_color
-            elif has_active:
-                group_color = active_color
-            elif has_missed:
-                group_color = missed_color
-            elif has_open:
-                group_color = open_color
-            group.setForeground(0, group_color)
-        # No custom plus/minus prefixes; use default icons
-        # Auto-size columns
-        self.tree_widget.resizeColumnToContents(0)        # Smart auto-expansion logic:
-        # 1. Collapse groups where all manifests are acknowledged (Ack or Ack Late)
-        # 2. Expand groups with Active or Missed manifests
-        # 3. Expand the next upcoming Open manifest group
-        
-        # Find next Open group (earliest time with Open manifests)
-        next_open_group = None
-        next_open_time = None
-        now_time = now.time()
-        
-        for i in range(self.tree_widget.topLevelItemCount()):
-            grp = self.tree_widget.topLevelItem(i)
-            group_time_str = grp.text(0)
-            try:
-                group_time = datetime.strptime(group_time_str, '%H:%M').time()
-                
-                # Check if group has any Open manifests
-                has_open_manifests = any(
-                    ' - Open' in grp.child(j).text(0)
-                    for j in range(grp.childCount())
-                )
-                
-                # If this group has Open manifests and is the next upcoming time
-                if has_open_manifests and group_time >= now_time:
-                    if next_open_time is None or group_time < next_open_time:
-                        next_open_time = group_time
-                        next_open_group = i
-            except ValueError:
-                continue  # Skip if time parsing fails
-        
-        # Apply expansion logic
-        # First, check if ALL groups are fully acknowledged (no Active, Missed, or Open manifests)
-        all_groups_acknowledged = True
-        for i in range(self.tree_widget.topLevelItemCount()):
-            grp = self.tree_widget.topLevelItem(i)
-            has_unacknowledged = any(
-                (' - Active' in grp.child(j).text(0) or 
-                 ' - Missed' in grp.child(j).text(0) or 
-                 ' - Open' in grp.child(j).text(0))
-                for j in range(grp.childCount())
-            )
-            if has_unacknowledged:
-                all_groups_acknowledged = False
-                break
-        
-        # Apply expansion rules based on overall state
-        for i in range(self.tree_widget.topLevelItemCount()):
-            grp = self.tree_widget.topLevelItem(i)
-            
-            # Check what types of manifests this group has
-            has_active = any(' - Active' in grp.child(j).text(0) for j in range(grp.childCount()))
-            has_missed = any(' - Missed' in grp.child(j).text(0) for j in range(grp.childCount()))
-            has_open = any(' - Open' in grp.child(j).text(0) for j in range(grp.childCount()))
-            has_only_acknowledged = all(
-                (' - Acknowledged' in grp.child(j).text(0))
-                for j in range(grp.childCount())
-            )
-            
-            # Expansion rules:
-            if has_active or has_missed:
-                # Always expand Active or Missed
-                grp.setExpanded(True)
-            elif all_groups_acknowledged:
-                # If everything is fully acknowledged, expand all to show the completed work
-                grp.setExpanded(True)
-            elif has_only_acknowledged:
-                # Collapse if everything is acknowledged but other groups still have work
-                grp.setExpanded(False)
-            elif has_open and i == next_open_group:
-                # Expand next upcoming Open group
-                grp.setExpanded(True)
-            else:                # Collapse other Open groups
-                grp.setExpanded(False)
-        
-        self.first_populate = False
-        
-        # Show Snooze button only when there are active flashing items
-        # Fullscreen button is always visible for warehouse TV displays
-        if self.flashing_items:
-            self.snooze_btn.show()
-        else:
-            self.snooze_btn.hide()
-        
-        # Update tray menu to reflect current alert state
-        self.update_tray_menu()
-    
-    def update_combined_message(self):
-        """Update combined message bar with either speech ticker or countdown message"""
-        # Priority: speech ticker over countdown message
-        if self.ticker_text:
-            self.display_scrolling_text(self.ticker_text)
-        elif self.countdown_text:
-            self.combined_message_label.setText(self.countdown_text)
-        else:
-            self.combined_message_label.setText("")
-    
-    def display_scrolling_text(self, text):
-        """Display scrolling text animation"""
-        if not text:
-            self.combined_message_label.setText("")
-            return
-            
-        # Calculate visible portion of text
-        label_width = self.combined_message_label.width() - 30  # Account for padding
-        font_metrics = self.combined_message_label.fontMetrics()
-        text_width = font_metrics.horizontalAdvance(text)
-        
-        if text_width <= label_width:
-            # Text fits, just center it
-            self.combined_message_label.setText(text)
-            return
-            
-        # Scroll the text
-        visible_chars = max(1, label_width // font_metrics.averageCharWidth())
-        
-        if self.ticker_position > len(text) + 10:  # Reset after scrolling past
-            self.ticker_position = -visible_chars
-            
-        start_pos = max(0, self.ticker_position)
-        end_pos = min(len(text), self.ticker_position + visible_chars)
-        
-        if start_pos < len(text):
-            visible_text = text[start_pos:end_pos]
-        else:
-            visible_text = ""
-            
-        self.combined_message_label.setText(visible_text)
-        self.ticker_position += 1
-
-    def set_ticker_text(self, text):
-        """Set new text for the scrolling ticker"""
-        self.ticker_text = text
-        self.ticker_position = 0
-
-    def set_countdown_text(self, text):
-        """Set countdown/status message text"""
-        self.countdown_text = text
-
-    def toggle_flashing(self):
-        # Skip flashing during snooze
-        if self.snooze_until and datetime.now() < self.snooze_until:
-            return
-        
-        self.flashing_on = not self.flashing_on
-        
-        # Flash main background during active/missed alerts FIRST
-        if self.background_flashing:
-            self.update_flashing_background()
-        
-        # THEN update flashing items after background colors are set
-        for item in self.flashing_items:
-            if self.background_flashing:
-                # When background is flashing, make Active items stand out
-                if self.flashing_on:
-                    # Red background phase - make Active items white for visibility
-                    item.setForeground(0, QColor(255, 255, 255))  # White text
-                else:
-                    # White background phase - use original red color
-                    item.setForeground(0, QColor(255, 0, 0))  # Bright red
-            else:
-                # Normal item flashing when no background flash - use original colors
-                if self.flashing_on:
-                    item.setForeground(0, Qt.red)
-                else:
-                    item.setForeground(0, Qt.white)
-        
-        # Also check sound on every flash
-        self.check_and_play_sound()
-    
-    def update_flashing_background(self):
-        """Update only the tree widget background and text colors for flashing alert effect"""
-        # Determine background and text colors based on flash state
-        if self.flashing_on:
-            # Red background phase - only for tree widget
-            tree_bg_color = "#ff0000"  # Red background
-            tree_text_color = "white"  # White text on red
-        else:
-            # White background phase - only for tree widget
-            tree_bg_color = "white" 
-            tree_text_color = "black"   # Black text on white
-        
-        # Apply flashing background stylesheet - ONLY to tree widget, leave interface normal
-        self.tree_widget.setStyleSheet(f"""
-            QTreeWidget {{
-                background-color: {tree_bg_color};
-                color: {tree_text_color};
-                border: 1px solid #ccc;
+        self.setStyleSheet(f"""
+            StatusCard {{
+                background: transparent;
+                border: 2px solid {border_color};
+                border-radius: 12px;
             }}
         """)
         
-        # Also update all tree items to have proper colors
-        self.update_all_tree_item_colors(tree_text_color)
-
-    def snooze_alerts(self):
-        from PyQt5.QtWidgets import QInputDialog, QMessageBox
-        # Ask for snooze duration in minutes with state preservation
-        duration, ok = self._show_int_dialog_with_state_preservation(
-            "Snooze Alerts", 
-            "Snooze duration (minutes):", 
-            value=2, min_val=1, max_val=30
-        )
-        if not ok:
-            return        # Calculate end time
-        self.snooze_until = datetime.now() + timedelta(minutes=duration)
-        
-        # Stop any playing sound
-        if self.sound:
-            self.sound.stop()
-            self.sound = None
-        
-        # Stop speech timer during snooze
-        if self.speech_timer.isActive():
-            self.speech_timer.stop()
-        
-        # Remove always-on-top flag during snooze so window can be minimized
-        if self.windowFlags() & Qt.WindowStaysOnTopHint:
-            self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
-        
-        # Inform user with state preservation
-        self._show_message_with_state_preservation(
-            "information", 
-            "Snoozed", 
-            f"Alerts snoozed for {duration} minutes. Window can now be minimized."
-        )
-        # Schedule end of snooze
-        QTimer.singleShot(duration * 60 * 1000, self.end_snooze)
-
-    def end_snooze(self):
-        # Clear snooze and restore window visibility state-aware
-        self.snooze_until = None
-        self._ensure_window_visibility()  # Use centralized state-aware method
-        self.populate_list()
-        self.update_clock_and_countdown()
-        
-        # Ensure always-on-top when coming out of snooze if alerts active
-        # Only set flag if not already set to avoid window state issues
-        if not (self.windowFlags() & Qt.WindowStaysOnTopHint):
-            self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-            # Don't call show() after setting flags
-
-    def switch_monitor(self):
-        """Cycle window to the next available screen"""
-        from PyQt5.QtWidgets import QApplication
-        screens = QApplication.screens()
-        if len(screens) <= 1:
-            return  # No other screens to switch to
-        
-        # Get current screen
-        fg = self.frameGeometry()
-        center = fg.center()
-        current_screen_idx = 0
-        for i, screen in enumerate(screens):
-            if screen.geometry().contains(center):
-                current_screen_idx = i
-                break
-        
-        # Get next screen
-        next_screen_idx = (current_screen_idx + 1) % len(screens)
-        next_screen = screens[next_screen_idx]
-        
-        # Remember current state
-        was_fullscreen = bool(self.windowState() & Qt.WindowFullScreen)
-        was_maximized = bool(self.windowState() & Qt.WindowMaximized)
-        
-        # Reset to normal state first to avoid issues
-        self.setWindowState(Qt.WindowNoState)
-        self.show()
-        
-        # Move to center of next screen
-        next_rect = next_screen.geometry()
-        self.move(next_rect.center() - self.rect().center())
-        
-        # Apply the same state on the new screen
-        if was_fullscreen:
-            self.setWindowState(Qt.WindowFullScreen)
-        elif was_maximized:
-            self.setWindowState(Qt.WindowMaximized)
-        else:
-            # Default to maximized for warehouse TV display
-            self.setWindowState(Qt.WindowMaximized)
-        
-        # Ensure window is visible and focused
-        self.show()
-        self.raise_()
-        self.activateWindow()
-        self.show()
-    def toggle_fullscreen(self):
-        # Toggle between fullscreen and maximized window
-        if self.windowState() & Qt.WindowFullScreen:
-            # Exit fullscreen
-            self.setWindowState(Qt.WindowMaximized)
-            # Update icon back to fullscreen symbol
-            self.full_btn.setIcon(self.style().standardIcon(QStyle.SP_TitleBarMaxButton))
-        else:
-            # Enter fullscreen
-            self.setWindowState(Qt.WindowFullScreen)
-            # Update icon to normal/restore symbol
-            self.full_btn.setIcon(self.style().standardIcon(QStyle.SP_TitleBarNormalButton))
-        # Don't use show() - it can disrupt window state
-
-    def collapse_all(self):
-        """Collapse all manifest groups in the tree"""
-        self.tree_widget.collapseAll()
-
-    def expand_all(self):
-        """Expand all manifest groups in the tree"""
-        self.tree_widget.expandAll()
-
-    def closeEvent(self, event):
-        """Prevent accidental closing in warehouse environment."""
-        # For warehouse TV displays, don't minimize or hide the window
-        # Just ignore the close event to prevent accidental closure
-        event.ignore()
-        # Preserve window state when preventing close
-        self._preserve_window_state_after_ack()
+        self.time_status_label.setStyleSheet(f"color: {status_color}; background: transparent;")
     
-    def handle_item_expanded(self, item):
-        """Update prefix when a group is expanded"""
-        if item.parent() is None:
-            text = item.text(0)
-            # Strip existing prefix
-            base = text[2:] if text.startswith(('+ ', '− ')) else text
-            item.setText(0, f"− {base}")
-
-    def handle_item_collapsed(self, item):
-        """Update prefix when a group is collapsed"""
-        if item.parent() is None:
-            text = item.text(0)
-            base = text[2:] if text.startswith(('+ ', '− ')) else text
-            item.setText(0, f"+ {base}")
-
-
-    def has_active_alerts(self):
-        """Helper method to check if there are any active or missed alerts"""
-        return any(
-            ("Active" in self.tree_widget.topLevelItem(i).child(j).text(0) or
-             "Missed" in self.tree_widget.topLevelItem(i).child(j).text(0))
-            for i in range(self.tree_widget.topLevelItemCount())
-            for j in range(self.tree_widget.topLevelItem(i).childCount())
-        )
+    def set_manifests(self, manifests):
+        """Update manifest details"""
+        self.manifests = manifests
+        if manifests:
+            self.update_manifest_display()
+        else:
+            self.details_label.setText("")
     
-    def has_unsnooze_alerts(self):
-        """Helper method to check if there are active alerts that are NOT snoozed"""
-        return self.has_active_alerts() and not (self.snooze_until and datetime.now() < self.snooze_until)
+    def set_acknowledgment(self, user_info, reason=None):
+        """Update acknowledgment display with user details"""
+        if user_info:
+            if reason == "late":
+                # For missed deliveries - show user and time
+                self.ack_status_label.setText("Done Late")
+                self.ack_details_label.setText(f"by {user_info}")
+                self.ack_status_label.setStyleSheet("color: #ffb347; background: transparent;")  # Lighter orange
+                self.ack_details_label.setStyleSheet("color: #ffb347; background: transparent;")  # Match color
+            else:
+                # For completed/acknowledged - show user and time
+                self.ack_status_label.setText("Done")
+                self.ack_details_label.setText(f"by {user_info}")
+                self.ack_status_label.setStyleSheet("color: #2ed573; background: transparent;")  # Green for done
+                self.ack_details_label.setStyleSheet("color: #2ed573; background: transparent;")  # Match color
+        else:
+            # Clear acknowledgment
+            self.ack_status_label.setText("")
+            self.ack_details_label.setText("")
+    
+    def card_clicked(self, event):
+        """Handle card click - disabled for now, use double-click on time header"""
+        pass  # Disabled card clicking, only time header double-click works
+    
+    def card_hover_enter(self, event):
+        """Handle mouse enter on card border"""
+        # Add subtle card border highlight
+        current_style = self.styleSheet()
+        if "border: 3px solid" not in current_style:
+            # Increase border thickness slightly for hover effect
+            for status in ["ACTIVE", "MISSED", "ACKNOWLEDGED", "OPEN"]:
+                if status.lower() in current_style.lower():
+                    current_style = current_style.replace("border: 2px solid", "border: 3px solid")
+                    break
+            self.setStyleSheet(current_style)
+    
+    def card_hover_leave(self, event):
+        """Handle mouse leave on card"""
+        # Remove card border highlight
+        current_style = self.styleSheet()
+        current_style = current_style.replace("border: 3px solid", "border: 2px solid")
+        self.setStyleSheet(current_style)
+        # Also ensure time header highlight is removed
+        self.time_header_hover_leave(event)
+    
+    def time_header_double_clicked(self, event):
+        """Handle double-click on time header to acknowledge whole card"""
+        if (self.status in ["ACTIVE", "MISSED"] and 
+            self.parent_display and 
+            hasattr(self.parent_display, 'acknowledge_time_slot')):
+            self.parent_display.acknowledge_time_slot(self.time_str)
+    
+    def time_header_hover_enter(self, event):
+        """Handle mouse enter on time header - no background colors"""
+        # No background color hover effects - keep clean appearance
+        pass
+    
+    def time_header_hover_leave(self, event):
+        """Handle mouse leave on time header - no background colors"""
+        # No background color hover effects - keep clean appearance
+        pass
+    
+    def update_manifest_display(self):
+        """Update the manifest display with individual clickable carriers"""
+        # Clear existing carrier labels
+        for i in reversed(range(self.carriers_layout.count())):
+            child = self.carriers_layout.itemAt(i).widget()
+            if child:
+                child.setParent(None)
+        
+        if self.manifests:
+            for carrier, status in self.manifests:
+                # Create individual carrier label
+                carrier_label = QLabel()
+                carrier_label.setFont(QFont("Segoe UI", 22))  # Increased from 18 to 22
+                carrier_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                # No padding at all for minimal line height
+                
+                # Set text and styling based on status (clean display)
+                if status == "Acknowledged":
+                    carrier_label.setText(carrier)
+                    carrier_label.setStyleSheet("color: #2ed573; background: transparent;")
+                elif status == "AcknowledgedLate":
+                    carrier_label.setText(carrier)
+                    carrier_label.setStyleSheet("color: #ffb347; background: transparent;")
+                elif status == "Active":
+                    carrier_label.setText(carrier)
+                    carrier_label.setStyleSheet("color: #ffffff; background: transparent; border-radius: 5px;")
+                    # Make active items clickable and hoverable
+                    carrier_label.mousePressEvent = lambda event, c=carrier: self.acknowledge_single_carrier(c)
+                    carrier_label.enterEvent = lambda event, label=carrier_label: self.carrier_hover_enter(label, "#ff4757")
+                    carrier_label.leaveEvent = lambda event, label=carrier_label: self.carrier_hover_leave(label)
+                elif status == "Missed":
+                    carrier_label.setText(carrier)
+                    carrier_label.setStyleSheet("color: #ff4757; background: transparent; border-radius: 5px;")
+                    # Make missed items clickable and hoverable
+                    carrier_label.mousePressEvent = lambda event, c=carrier: self.acknowledge_single_carrier(c)
+                    carrier_label.enterEvent = lambda event, label=carrier_label: self.carrier_hover_enter(label, "#c44569")
+                    carrier_label.leaveEvent = lambda event, label=carrier_label: self.carrier_hover_leave(label)
+                else:  # Open
+                    carrier_label.setText(carrier)
+                    carrier_label.setStyleSheet("color: #ffffff; background: transparent;")
+                
+                self.carriers_layout.addWidget(carrier_label)
+            
+            # Extremely compact height calculation for minimal vertical space
+            line_count = len(self.manifests)
+            base_height = 35       # Even smaller base height
+            line_height = 22       # Tight but readable height per carrier line  
+            padding = 10           # Minimal padding
+            new_height = base_height + (line_count * line_height) + padding
+            self.setFixedHeight(new_height)  # Use fixed height for consistent appearance
+            
+            # Update overall card status
+            self.update_card_status()
+    
+    def carrier_hover_enter(self, label, color):
+        """Handle hover enter on individual carrier - no background colors"""
+        # Just add a subtle text glow effect by increasing brightness
+        current_style = label.styleSheet()
+        # For now, just leave the existing style - no background colors
+        pass
+    
+    def carrier_hover_leave(self, label):
+        """Handle hover leave on individual carrier - no background colors"""
+        # No background colors to remove, just leave as is
+        pass
+    
+    def hex_to_rgba(self, hex_color, alpha):
+        """Convert hex color to RGBA string"""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return f"({r}, {g}, {b}, {alpha})"
+    
+    def acknowledge_single_carrier(self, carrier):
+        """Acknowledge a single carrier"""
+        if self.parent_display and hasattr(self.parent_display, 'acknowledge_single_carrier'):
+            self.parent_display.acknowledge_single_carrier(self.time_str, carrier)
+    
+    def update_card_status(self):
+        """Update card status based on manifest states"""
+        if not self.manifests:
+            return
+            
+        acknowledged_count = sum(1 for _, status in self.manifests if status in ["Acknowledged", "AcknowledgedLate"])
+        missed_count = sum(1 for _, status in self.manifests if status == "Missed")
+        active_count = sum(1 for _, status in self.manifests if status == "Active")
+        total_count = len(self.manifests)
+        
+        # Determine card status and acknowledgment display
+        if acknowledged_count == total_count:
+            # All acknowledged
+            self.status = "ACKNOWLEDGED"
+            # Show acknowledgment info from the first acknowledged item
+            if self.parent_display:
+                ack_info = self.get_acknowledgment_info()
+                if ack_info:
+                    user_name = ack_info.get('user', 'Unknown')
+                    reason = ack_info.get('reason', '')
+                    timestamp = ack_info.get('timestamp', '')
+                    if timestamp:
+                        try:
+                            # Parse timestamp and format time
+                            ack_time = datetime.fromisoformat(timestamp)
+                            time_str = ack_time.strftime('%H:%M')
+                            if reason:  # Late acknowledgment
+                                self.set_acknowledgment(f"{user_name} at {time_str}", "late")
+                            else:  # Regular acknowledgment
+                                self.set_acknowledgment(f"{user_name} at {time_str}")
+                        except:
+                            if reason:
+                                self.set_acknowledgment(user_name, "late")
+                            else:
+                                self.set_acknowledgment(user_name)
+                    else:
+                        if reason:
+                            self.set_acknowledgment(user_name, "late")
+                        else:
+                            self.set_acknowledgment(user_name)
+        elif missed_count > 0:
+            # Has missed items - card becomes MISSED
+            self.status = "MISSED"
+            if acknowledged_count > 0:
+                # Partially acknowledged
+                self.ack_status_label.setText(f"{acknowledged_count}/{total_count} Done")
+                self.ack_status_label.setStyleSheet("color: #ffb347; background: transparent;")  # Lighter orange for partial
+                self.ack_details_label.setText("")
+            else:
+                self.set_acknowledgment("")  # Clear acknowledgment display
+        elif active_count > 0:
+            # Has active items - card becomes ACTIVE
+            self.status = "ACTIVE"
+            if acknowledged_count > 0:
+                # Partially acknowledged
+                self.ack_status_label.setText(f"{acknowledged_count}/{total_count} Done")
+                self.ack_status_label.setStyleSheet("color: #ffb347; background: transparent;")  # Lighter orange for partial
+                self.ack_details_label.setText("")
+            else:
+                self.set_acknowledgment("")  # Clear acknowledgment display
+        else:
+            # Open items
+            self.status = "OPEN"
+            self.set_acknowledgment("")  # Clear acknowledgment display
+        
+        # Update the combined time/status label - change ACKNOWLEDGED to DONE
+        display_status = "DONE" if self.status == "ACKNOWLEDGED" else self.status
+        self.time_status_label.setText(f"{self.time_str} - {display_status}")
+        self.update_styling()
+    
+    def get_acknowledgment_info(self):
+        """Get acknowledgment info for the first acknowledged item"""
+        if not self.parent_display:
+            return None
+            
+        try:
+            acks = self.parent_display.load_acknowledgments()
+            today = datetime.now().date().isoformat()
+            
+            for carrier, status in self.manifests:
+                if status in ["Acknowledged", "AcknowledgedLate"]:
+                    ack_key = f"{today}_{self.time_str}_{carrier}"
+                    if ack_key in acks:
+                        return acks[ack_key]
+            return None
+        except:
+            return None
 
-    def _bring_to_front(self):
-        """Helper to bring window to front and focus - only if not snoozed."""
-        # Don't force window to front if alerts are snoozed
-        if self.snooze_until and datetime.now() < self.snooze_until:
+
+class AlertDisplay(QWidget):
+    def get_acknowledgments_path(self):
+        """Get path to acknowledgments file"""
+        try:
+            settings = self.load_settings()
+            data_folder = settings.get('data_folder', '')
+            
+            if data_folder and os.path.exists(data_folder):
+                return os.path.join(data_folder, 'ack.json')
+            
+            # Fallback to app_data folder
+            return os.path.join(os.path.dirname(__file__), 'app_data', 'ack.json')
+        except Exception:
+            return os.path.join(os.path.dirname(__file__), 'app_data', 'ack.json')
+    
+    def load_settings(self):
+        """Load application settings"""
+        try:
+            settings_path = os.path.join(os.path.dirname(__file__), 'app_data', 'settings.json')
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Manifest Times")
+        self.setMinimumSize(1200, 800)
+        
+        # Alert state management
+        self.alert_active = False
+        self.acknowledging_in_progress = False  # Flag to prevent window restoration during acknowledgments
+        
+        # Track previous window state for fullscreen toggle
+        self.previous_window_state = Qt.WindowState.WindowNoState
+        
+        # Set window icon
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'icon.ico')
+        if os.path.exists(icon_path):
+            window_icon = QIcon(icon_path)
+            if not window_icon.isNull():
+                self.setWindowIcon(window_icon)
+        
+        self.status_cards = {}
+        self.clock_timer = None
+        self.refresh_timer = None
+        self.flash_timer = None  # Timer for alarm background flashing
+        self.pause_timer = None  # Timer for pause between flash cycles
+        self.flash_state = False  # Track flash on/off state
+        self.flash_cycle_count = 0  # Track number of flashes in current cycle
+        self.is_paused = False  # Track if we're in pause mode
+        
+        # Initialize sound effect
+        self.setup_sound()
+        
+        self.setup_ui()
+        self.setup_timers()
+        self.apply_background_style()  # Initialize background
+        self.populate_data()
+    
+    def setup_ui(self):
+        """Create the modern mission control layout"""
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 30 to 10
+        main_layout.setSpacing(10)  # Reduced spacing from 20 to 10
+        
+        # Header section
+        header_layout = QHBoxLayout()
+        
+        # Title
+        title_label = QLabel("MANIFEST TIMES")
+        title_label.setFont(QFont("Segoe UI", 42, QFont.Weight.Bold))  # Increased from 36 to 42
+        title_label.setStyleSheet("color: #ffffff; padding: 0px;")  # Removed bottom padding
+        header_layout.addWidget(title_label)
+        
+        header_layout.addStretch()
+        
+        # Multi-monitor button
+        self.monitor_btn = QPushButton("🖥️")
+        self.monitor_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.monitor_btn.setFixedSize(60, 40)
+        self.monitor_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.monitor_btn.clicked.connect(self.show_monitor_menu)
+        header_layout.addWidget(self.monitor_btn)
+        
+        # Fullscreen button
+        self.fullscreen_btn = QPushButton("⛶")
+        self.fullscreen_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.fullscreen_btn.setFixedSize(60, 40)
+        self.fullscreen_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
+        header_layout.addWidget(self.fullscreen_btn)
+        
+        # Settings button with cog icon
+        self.settings_btn = QPushButton("⚙️")
+        self.settings_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.settings_btn.setFixedSize(60, 40)
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.settings_btn.clicked.connect(self.show_settings_dialog)
+        header_layout.addWidget(self.settings_btn)
+        
+        # Refresh Data button in header with refresh icon
+        self.reload_btn = QPushButton("🔄")
+        self.reload_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.reload_btn.setFixedSize(60, 40)
+        self.reload_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.reload_btn.clicked.connect(self.populate_data)
+        header_layout.addWidget(self.reload_btn)
+        
+        # Clock - DS-Digital font for 7-segment display look
+        self.clock_label = QLabel()
+        self.clock_label.setFont(QFont("DS-Digital", 38, QFont.Weight.Bold))  # Increased from 32 to 38
+        self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px; text-shadow: 0px 0px 5px #B8860B;")  # Golden yellow with subtle glow
+        header_layout.addWidget(self.clock_label)
+        
+        main_layout.addLayout(header_layout)
+        
+        # Status summary bar
+        self.summary_label = QLabel("SYSTEM NOMINAL")
+        self.summary_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))  # Increased from 18 to 22
+        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.summary_label.setStyleSheet("""
+            background-color: #2ed573;
+            color: #000000;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        """)
+        main_layout.addWidget(self.summary_label)
+        
+        # Scrollable cards area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #2c2c54;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3742fa;
+                border-radius: 6px;
+            }
+        """)
+        
+        # Cards container
+        cards_widget = QWidget()
+        self.cards_layout = QGridLayout(cards_widget)
+        self.cards_layout.setSpacing(15)  # Reduced from 20 to 15
+        self.cards_layout.setContentsMargins(10, 10, 10, 10)
+        
+        scroll_area.setWidget(cards_widget)
+        main_layout.addWidget(scroll_area)
+        self.setLayout(main_layout)
+        
+        # Initialize fullscreen icon to correct state
+        self.update_fullscreen_icon()
+    
+    def setup_sound(self):
+        """Initialize sound effect for alerts using QMediaPlayer for MP3 support"""
+        try:
+            sound_path = os.path.join(os.path.dirname(__file__), 'resources', 'alert.mp3')
+            if os.path.exists(sound_path):
+                self.alert_sound = QMediaPlayer()
+                self.audio_output = QAudioOutput()
+                self.alert_sound.setAudioOutput(self.audio_output)
+                self.alert_sound.setSource(QUrl.fromLocalFile(sound_path))
+                self.audio_output.setVolume(0.7)  # 70% volume
+                
+                # Set up looping - when playback finishes, restart if still in alarm mode
+                self.alert_sound.mediaStatusChanged.connect(self.on_media_status_changed)
+            else:
+                self.alert_sound = None
+                self.audio_output = None
+        except Exception:
+            self.alert_sound = None
+            self.audio_output = None
+
+    def on_media_status_changed(self, status):
+        """Handle media status changes to implement looping during alarm mode"""
+        from PyQt6.QtMultimedia import QMediaPlayer
+        
+        # When playback ends, restart if we're still in alarm mode
+        if (status == QMediaPlayer.MediaStatus.EndOfMedia and 
+            getattr(self, 'alarm_sound_playing', False) and 
+            getattr(self, 'alert_active', False)):
+            # Wait 500ms before restarting to ensure clean playback (3-second file needs breathing room)
+            QTimer.singleShot(500, self.restart_alarm_audio)
+
+    def restart_alarm_audio(self):
+        """Restart alarm audio if still in alarm mode"""
+        if (getattr(self, 'alarm_sound_playing', False) and 
+            getattr(self, 'alert_active', False) and
+            self.alert_sound):
+            # Stop and restart for cleaner playback
+            self.alert_sound.stop()
+            # Small delay to ensure stop completes
+            QTimer.singleShot(100, lambda: self.alert_sound.play() if self.alert_sound else None)
+
+    def changeEvent(self, event):
+        """Handle window state changes to update fullscreen icon"""
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange:
+            # Update icon when window state changes (including external changes)
+            self.update_fullscreen_icon()
+        super().changeEvent(event)
+    
+    def apply_dark_theme(self):
+        """Apply SpaceX-style dark theme"""
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #0f0f23;
+                color: #ffffff;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QLabel {
+                background: transparent;
+                color: inherit;
+            }
+            QPushButton {
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+                padding: 15px 30px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4f69ff;
+            }
+            QPushButton:pressed {
+                background-color: #2c35e6;
+            }
+            QMessageBox {
+                background-color: #1a1a2e;
+                color: #ffffff;
+                font-size: 16px;
+            }
+            QMessageBox QLabel {
+                color: #ffffff;
+                font-size: 16px;
+            }
+            QMessageBox QPushButton {
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            QMessageBox QPushButton:hover {
+                background-color: #4f69ff;
+            }
+        """)
+    
+    def setup_timers(self):
+        """Setup update timers"""
+        # Stop existing timers if they exist
+        if hasattr(self, 'clock_timer') and self.clock_timer:
+            self.clock_timer.stop()
+        if hasattr(self, 'refresh_timer') and self.refresh_timer:
+            self.refresh_timer.stop()
+        if hasattr(self, 'flash_timer') and self.flash_timer:
+            self.flash_timer.stop()
+        if hasattr(self, 'pause_timer') and self.pause_timer:
+            self.pause_timer.stop()
+        
+        # Initialize alarm state tracking
+        self.alarm_sound_playing = False  # Track if sound is currently playing
+        
+        # Clock timer
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(1000)
+        
+        # Data refresh timer
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.populate_data)
+        self.refresh_timer.start(10000)  # 10 seconds (default when not in alert mode)
+        
+        # Flash timer for alarm background - SINGLE SHOT to prevent overlap
+        self.flash_timer = QTimer(self)
+        self.flash_timer.setSingleShot(False)  # Will be managed manually
+        self.flash_timer.timeout.connect(self.toggle_flash)
+        
+        # Pause timer for breaks between flash cycles - SINGLE SHOT
+        self.pause_timer = QTimer(self)
+        self.pause_timer.timeout.connect(self.resume_flashing)
+        self.pause_timer.setSingleShot(True)  # One-shot timer for pauses
+        
+        # Timer starts/stops based on alert state in update_flash_timer()
+        
+        self.update_clock()
+    
+    def update_refresh_timer(self):
+        """Update refresh timer interval based on alert state"""
+        if self.refresh_timer:
+            if self.alert_active:
+                # Alert mode: 1 second for real-time updates
+                self.refresh_timer.start(1000)
+            else:
+                # Normal mode: 10 seconds
+                self.refresh_timer.start(10000)
+    
+    def update_flash_timer(self):
+        """Start or stop flash timer based on alert state with single alarm instance"""
+        if self.flash_timer and self.pause_timer:
+            if self.alert_active:
+                # Only start alarm if not already running
+                if not self.flash_timer.isActive() and not self.pause_timer.isActive():
+                    # ALARM ACTIVATION: Bring to foreground and fullscreen on selected monitor
+                    self.activate_alarm_display()
+                    
+                    # Start the flash cycle with 3 red flashes
+                    self.flash_cycle_count = 0
+                    self.is_paused = False
+                    # Faster random flash speed between 2-10 Hz (100ms to 500ms) for more intense alarm
+                    import random
+                    flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
+                    self.flash_timer.start(flash_interval)
+                    
+                    # Start continuous alarm sound when alarm starts
+                    if self.alert_sound and not getattr(self, 'alarm_sound_playing', False):
+                        self.alarm_sound_playing = True
+                        self.alert_sound.play()  # Will loop automatically via media status handler
+            else:
+                # Stop all flashing and sound when alert is cleared
+                self.stop_all_alarms()
+    
+    def reset_sound_flag(self):
+        """Reset sound flag (fallback method)"""
+        self.alarm_sound_playing = False
+    
+    def stop_all_alarms(self):
+        """Stop all alarm timers and reset state"""
+        # Stop all timers
+        if self.flash_timer and self.flash_timer.isActive():
+            self.flash_timer.stop()
+        if self.pause_timer and self.pause_timer.isActive():
+            self.pause_timer.stop()
+            
+        # Reset all alarm state
+        self.flash_state = False
+        self.is_paused = False
+        self.alarm_sound_playing = False
+        
+        # Stop sound if playing
+        if self.alert_sound:
+            self.alert_sound.stop()
+        
+        # Only restore window state if NO alerts are active AND not in the middle of acknowledging
+        print(f"DEBUG: stop_all_alarms, alert_active={getattr(self, 'alert_active', False)}, acknowledging_in_progress={getattr(self, 'acknowledging_in_progress', False)}")
+        if not getattr(self, 'alert_active', False) and not getattr(self, 'acknowledging_in_progress', False):
+            print("DEBUG: Calling restore_alarm_display because no alerts active and not acknowledging")
+            self.restore_alarm_display()
+        else:
+            if getattr(self, 'alert_active', False):
+                print("DEBUG: NOT restoring window - alerts still active")
+            if getattr(self, 'acknowledging_in_progress', False):
+                print("DEBUG: NOT restoring window - acknowledgment in progress")
+            
+        # Ensure normal background
+        self.apply_background_style()
+    
+    def activate_alarm_display(self):
+        """Bring window to foreground and fullscreen on selected monitor when alarm starts"""
+        try:
+            # Load settings to get selected monitor
+            settings = self.load_settings()
+            target_monitor = settings.get('alarm_monitor', 0)
+            
+            # Get available screens
+            from PyQt6.QtGui import QGuiApplication
+            screens = QGuiApplication.screens()
+            
+            if target_monitor < len(screens):
+                target_screen = screens[target_monitor]
+                
+                # Store current state for restoration
+                if not hasattr(self, 'alarm_previous_state'):
+                    if self.isFullScreen():
+                        self.alarm_previous_state = 'fullscreen'
+                    elif self.isMaximized():
+                        self.alarm_previous_state = 'maximized'
+                    else:
+                        self.alarm_previous_state = 'normal'
+                        self.alarm_previous_geometry = self.geometry()
+                
+                # Move to target screen center first (this ensures proper screen association)
+                screen_geometry = target_screen.geometry()
+                center_x = screen_geometry.x() + screen_geometry.width() // 2
+                center_y = screen_geometry.y() + screen_geometry.height() // 2
+                
+                # Position window at center of target monitor
+                self.move(center_x - self.width() // 2, center_y - self.height() // 2)
+                
+                # Bring to foreground
+                self.raise_()
+                self.activateWindow()
+                self.show()
+                
+                # Small delay to ensure window is properly positioned before fullscreen
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(50, self.do_alarm_fullscreen)
+                
+                # Force focus
+                self.setFocus()
+                
+            else:
+                # Fallback: just bring to front on current monitor
+                self.raise_()
+                self.activateWindow()
+                self.showFullScreen()
+                
+        except Exception as e:
+            # Fallback: just bring to front
+            self.raise_()
+            self.activateWindow()
+            self.show()
+    
+    def restore_alarm_display(self):
+        """Restore window to previous state when alarm ends"""
+        print(f"DEBUG: restore_alarm_display called, alert_active={getattr(self, 'alert_active', False)}")
+        if hasattr(self, 'alarm_previous_state'):
+            print(f"DEBUG: Restoring from state: {self.alarm_previous_state}")
+            try:
+                if self.alarm_previous_state == 'fullscreen':
+                    # Was already fullscreen, stay fullscreen
+                    pass
+                elif self.alarm_previous_state == 'maximized':
+                    self.showMaximized()
+                elif self.alarm_previous_state == 'normal':
+                    self.showNormal()
+                    if hasattr(self, 'alarm_previous_geometry'):
+                        self.setGeometry(self.alarm_previous_geometry)
+                
+                # Clean up alarm state tracking
+                delattr(self, 'alarm_previous_state')
+                if hasattr(self, 'alarm_previous_geometry'):
+                    delattr(self, 'alarm_previous_geometry')
+                    
+            except Exception:
+                # Fallback to normal window if restore fails
+                self.showNormal()
+        else:
+            print("DEBUG: No alarm_previous_state found")
+    
+    def do_alarm_fullscreen(self):
+        """Complete the fullscreen transition for alarm (called after positioning)"""
+        # Ensure window is normal state first, then go fullscreen
+        if self.isMaximized():
+            self.showNormal()
+        # Use a small delay to ensure proper state transition
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(10, lambda: self.showFullScreen())
+
+    def toggle_flash(self):
+        """Toggle flash state with 3 red flashes then random pause"""
+        if self.is_paused:
+            return
+            
+        self.flash_state = not self.flash_state
+        
+        # Count flashes (only count "on" states)
+        if self.flash_state:
+            self.flash_cycle_count += 1
+            
+            # After 3 red flashes, start random pause (3-10 seconds)
+            if self.flash_cycle_count >= 3:
+                self.flash_timer.stop()
+                self.is_paused = True
+                self.flash_state = False  # Ensure background goes to normal during pause
+                self.apply_background_style()
+                
+                # Random pause between 3-10 seconds
+                import random
+                pause_duration = random.randint(3000, 10000)  # 3-10 seconds in milliseconds
+                self.pause_timer.start(pause_duration)
+                return
+        
+        self.apply_background_style()
+    
+    def resume_flashing(self):
+        """Resume flashing after random pause with new random speed"""
+        # Only resume if alert is still active and we're not already flashing
+        if self.alert_active and not self.flash_timer.isActive():
+            self.flash_cycle_count = 0
+            self.is_paused = False
+            # New faster random flash speed for next cycle (2-10 Hz)
+            import random
+            flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
+            self.flash_timer.start(flash_interval)
+    
+    def apply_background_style(self):
+        """Apply background style with pure black default and pure red flash"""
+        if self.alert_active and self.flash_state and not self.is_paused:
+            # Pure red flash
+            bg_color = "#FF0000"
+        else:
+            # Pure black background
+            bg_color = "#000000"
+            
+        # Apply to main widget
+        self.setStyleSheet(f"""
+            AlertDisplay {{
+                background-color: {bg_color};
+            }}
+            QWidget {{
+                background-color: {bg_color};
+                color: #ffffff;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }}
+            QLabel {{
+                background: transparent;
+                color: inherit;
+            }}
+            QPushButton {{
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+                padding: 15px 30px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #4f69ff;
+            }}
+            QPushButton:pressed {{
+                background-color: #2c35e6;
+            }}
+            QMessageBox {{
+                background-color: #1a1a2e;
+                color: #ffffff;
+                font-size: 16px;
+            }}
+            QMessageBox QLabel {{
+                color: #ffffff;
+                font-size: 16px;
+            }}
+            QMessageBox QPushButton {{
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 80px;
+            }}
+            QMessageBox QPushButton:hover {{
+                background-color: #4f69ff;
+            }}
+        """)
+    
+    def update_clock(self):
+        """Update the clock display"""
+        now = datetime.now()
+        self.clock_label.setText(now.strftime('%H:%M:%S'))
+    
+    def load_config(self):
+        """Load configuration from settings-specified folder or fallback"""
+        try:
+            settings = self.load_settings()
+            data_folder = settings.get('data_folder', '')
+            
+            # Try settings-specified folder first
+            if data_folder and os.path.exists(data_folder):
+                config_path = os.path.join(data_folder, 'config.json')
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            
+            # Fallback to default locations
+            for folder in ['data', 'app_data', '.']:
+                config_path = os.path.join(os.path.dirname(__file__), folder, 'config.json')
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            
+            # Return fallback data if no config found
+            return load_config()
+            
+        except Exception:
+            return load_config()
+    
+    def populate_data(self):
+        """Populate cards with manifest data"""
+        # Clear existing cards
+        for card in self.status_cards.values():
+            card.setParent(None)
+        self.status_cards.clear()
+        
+        # Load configuration
+        config = self.load_config()
+        manifests = config.get('manifests', [])
+        
+        if not manifests:
+            # Show "no data" message
+            no_data_label = QLabel("NO MANIFEST DATA AVAILABLE")
+            no_data_label.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
+            no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            no_data_label.setStyleSheet("color: #ff4757; padding: 100px;")
+            self.cards_layout.addWidget(no_data_label, 0, 0)
+            self.update_summary("NO DATA")
             return
         
-        # Use the centralized state-aware visibility method
-        self._ensure_window_visibility()
-
-    def update_tray_menu(self):
-        """Update tray menu to reflect current state (e.g., enable/disable snooze)"""
-        # Recreate the tray menu to reflect current application state
-        if hasattr(self, 'tray_menu'):
-            self._create_tray_menu()
-
-    def _create_tray_menu(self):
-        """Create enhanced system tray menu with all main application functions"""
-        from PyQt5.QtWidgets import QAction, QMenu
-        self.tray_menu.clear()
+        # Sort manifests by time
+        manifests = sorted(manifests, key=lambda m: m['time'])
         
-        # Bring to Front
-        show_action = QAction("Bring to Front", self)
-        show_action.triggered.connect(lambda: self._toggle_visibility())
-        self.tray_menu.addAction(show_action)
+        # Load acknowledgments
+        acks = self.load_acknowledgments()
         
-        self.tray_menu.addSeparator()
+        now = datetime.now()
+        today = now.date().isoformat()
         
-        # Reload Config
-        reload_action = QAction("Reload Config", self)
-        reload_action.triggered.connect(self.reload_config)
-        self.tray_menu.addAction(reload_action)
+        # Create status cards - one per row
+        row = 0
+        cols_per_row = 1  # One card per row for wider layout
         
-        # Snooze Alerts (context-aware enable/disable)
-        snooze_action = QAction("Snooze Alerts", self)
-        snooze_action.triggered.connect(self.snooze_alerts)
-        # Enable snooze only when there are active alerts
-        snooze_action.setEnabled(bool(self.flashing_items))
-        self.tray_menu.addAction(snooze_action)
+        active_count = 0
+        missed_count = 0
+        open_count = 0
+        acked_count = 0
         
-        # Toggle Fullscreen
-        fullscreen_action = QAction("Toggle Fullscreen", self)
-        fullscreen_action.triggered.connect(self.toggle_fullscreen)
-        self.tray_menu.addAction(fullscreen_action)
-        
-        # Monitor switching with smart submenu
-        self._create_monitor_submenu()
-        
-        self.tray_menu.addSeparator()
-        
-        # Exit
-        exit_action = QAction("Exit Application", self)
-        exit_action.triggered.connect(lambda: self.tray_icon.hide() or QApplication.instance().quit())
-        self.tray_menu.addAction(exit_action)
-
-    def _create_monitor_submenu(self):
-        """Create monitor switching submenu with smart detection"""
-        from PyQt5.QtWidgets import QApplication, QAction, QMenu
-        screens = QApplication.screens()
-        
-        if len(screens) <= 1:
-            # Single monitor - show disabled option
-            single_monitor_action = QAction("Single Monitor (disabled)", self)
-            single_monitor_action.setEnabled(False)
-            self.tray_menu.addAction(single_monitor_action)
-        else:
-            # Multiple monitors - create submenu
-            monitor_menu = QMenu("Switch to Monitor", self)
+        for manifest in manifests:
+            time_str = manifest['time']
             
-            # Determine current monitor
-            current_screen_idx = 0
-            fg = self.frameGeometry()
-            center = fg.center()
-            for i, screen in enumerate(screens):
-                if screen.geometry().contains(center):
-                    current_screen_idx = i
+            # Create status card with parent reference
+            card = StatusCard(time_str, parent_display=self)
+            self.status_cards[time_str] = card
+            
+            # Process carriers for this time - determine overall time slot status first
+            manifest_data = []
+            time_slot_status = get_manifest_status(time_str, now)
+            print(f"DEBUG: Processing time {time_str}, time_slot_status={time_slot_status}")
+            
+            for carrier in manifest.get('carriers', []):
+                ack_key = f"{today}_{time_str}_{carrier}"
+                is_acked = ack_key in acks
+                print(f"DEBUG: Carrier {carrier}, ack_key={ack_key}, is_acked={is_acked}")
+                
+                if is_acked:
+                    # Check if it was a late acknowledgment
+                    ack_info = acks[ack_key]
+                    reason = ack_info.get('reason', '')
+                    if reason and reason.strip():  # Has reason = late acknowledgment
+                        status = "AcknowledgedLate"
+                    else:
+                        status = "Acknowledged"
+                    acked_count += 1
+                    
+                    # Set acknowledgment display
+                    user_name = ack_info.get('user', 'Unknown')
+                    card.set_acknowledgment(user_name, reason if reason else None)
+                else:
+                    # Use the time slot status for all non-acknowledged items
+                    status = time_slot_status
+                    if status == "Active":
+                        active_count += 1
+                    elif status == "Missed":
+                        missed_count += 1
+                    else:
+                        open_count += 1
+                
+                manifest_data.append((carrier, status))
+            
+            card.set_manifests(manifest_data)
+            
+            # Add to grid - one per row
+            self.cards_layout.addWidget(card, row, 0)
+            row += 1
+        
+        # Update alert state
+        print(f"DEBUG populate_data: active_count={active_count}, missed_count={missed_count}, open_count={open_count}, acked_count={acked_count}")
+        self.alert_active = (active_count > 0 or missed_count > 0)
+        print(f"DEBUG populate_data: alert_active={self.alert_active}")
+        
+        # Update refresh timer interval based on alert state
+        self.update_refresh_timer()
+        
+        # Update flash timer based on alert state
+        self.update_flash_timer()
+        
+        # Update summary with next manifest countdown
+        next_manifest_info = self.get_next_manifest_info(manifests, now)
+        if active_count > 0:
+            self.update_summary("ACTIVE ALERTS", "#ff4757")
+        elif missed_count > 0:
+            self.update_summary("MISSED MANIFESTS", "#c44569")
+        elif next_manifest_info:
+            self.update_summary(next_manifest_info, "#3742fa")
+        else:
+            self.update_summary("ALL SYSTEMS NOMINAL", "#2ed573")
+    
+    def get_next_manifest_info(self, manifests, now):
+        """Get countdown to next manifest"""
+        try:
+            current_time = now.time()
+            next_manifest = None
+            
+            for manifest in manifests:
+                manifest_time = datetime.strptime(manifest['time'], '%H:%M').time()
+                
+                # Check if this manifest is in the future today
+                if manifest_time > current_time:
+                    next_manifest = manifest
                     break
             
-            # Add menu items for each monitor
-            for i, screen in enumerate(screens):
-                monitor_text = f"Monitor {i + 1}"
-                if i == current_screen_idx:
-                    monitor_text += " (Current)"
-                
-                monitor_action = QAction(monitor_text, self)
-                monitor_action.triggered.connect(lambda checked, idx=i: self._switch_to_monitor(idx))
-                monitor_menu.addAction(monitor_action)
+            # If no manifest found for today, check tomorrow's first manifest
+            if not next_manifest and manifests:
+                next_manifest = manifests[0]
+                # Calculate time to tomorrow's first manifest
+                tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                manifest_time = datetime.strptime(next_manifest['time'], '%H:%M').time()
+                next_time = tomorrow.replace(hour=manifest_time.hour, minute=manifest_time.minute)
+            else:
+                # Calculate time to today's next manifest
+                manifest_time = datetime.strptime(next_manifest['time'], '%H:%M').time()
+                next_time = now.replace(hour=manifest_time.hour, minute=manifest_time.minute, second=0, microsecond=0)
             
-            self.tray_menu.addMenu(monitor_menu)
+            # Calculate time difference
+            time_diff = next_time - now
+            
+            # Convert to hours and minutes
+            total_seconds = int(time_diff.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            
+            if hours > 0:
+                return f"NEXT MANIFEST IN {hours}h {minutes}m ({next_manifest['time']})"
+            else:
+                return f"NEXT MANIFEST IN {minutes}m ({next_manifest['time']})"
+                
+        except Exception:
+            return "NEXT MANIFEST OPEN"
+    
+    def update_summary(self, text, color="#2ed573"):
+        """Update the status summary bar"""
+        text_color = "#000000" if color == "#2ed573" else "#ffffff"
+        self.summary_label.setText(text)
+        self.summary_label.setStyleSheet(f"""
+            background-color: {color};
+            color: {text_color};
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        """)
+    
+    def get_ack_path(self):
+        """Get the correct path for ack.json using settings"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '')
+        
+        if data_folder and os.path.exists(data_folder):
+            return os.path.join(data_folder, 'ack.json')
+        else:
+            # This should not happen if settings are configured correctly
+            print(f"WARNING: data_folder '{data_folder}' not found, this may cause sync issues")
+            return os.path.join(os.path.dirname(__file__), 'ack.json')
+    
+    def load_acknowledgments(self):
+        """Load acknowledgment data from ack.json"""
+        try:
+            ack_path = self.get_ack_path()
+            
+            if not os.path.exists(ack_path):
+                return {}
+            
+            with open(ack_path, 'r', encoding='utf-8') as f:
+                ack_data = json.load(f)
+            
+            # Convert to lookup dict
+            acks = {}
+            today = datetime.now().date().isoformat()
+            
+            for ack in ack_data:
+                if ack.get('date') == today:
+                    key = f"{ack['date']}_{ack['manifest_time']}_{ack['carrier']}"
+                    acks[key] = ack
+            
+            return acks
+            
+        except Exception as e:
+            return {}
+    
+    def show_settings_dialog(self):
+        """Show settings configuration dialog with CSV export/import functionality"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Settings")
+        dialog.setFixedSize(600, 550)  # Increased size for monitor selection
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1a1a2e;
+                color: #ffffff;
+            }
+            QLabel {
+                color: #ffffff;
+                font-size: 14px;
+            }
+            QLineEdit {
+                background-color: #2c2c54;
+                border: 2px solid #3742fa;
+                border-radius: 5px;
+                padding: 8px;
+                color: #ffffff;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                border-color: #4f69ff;
+            }
+            QLineEdit.error {
+                border-color: #ff4757;
+                background-color: #3d1a1a;
+            }
+            QPushButton {
+                background-color: #3742fa;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #4f69ff;
+            }
+            QPushButton:disabled {
+                background-color: #555555;
+                color: #999999;
+            }
+            .status-label {
+                font-size: 12px;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            .status-valid {
+                color: #2ed573;
+                background-color: #1b2d1b;
+            }
+            .status-invalid {
+                color: #ff4757;
+                background-color: #3d1a1a;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        form_layout = QFormLayout()
+        
+        # Load current settings - ensure we get the actual values
+        current_settings = self.load_settings()
+        
+        # Username field
+        self.username_edit = QLineEdit()
+        username_value = current_settings.get('username', '')
+        self.username_edit.setText(username_value)
+        self.username_edit.setPlaceholderText("Enter username...")
+        form_layout.addRow("Username:", self.username_edit)
+        
+        # Folder path field with validation
+        folder_widget = QWidget()
+        folder_layout = QVBoxLayout(folder_widget)
+        folder_layout.setContentsMargins(0, 0, 0, 0)
+        folder_layout.setSpacing(5)
+        
+        self.folder_edit = QLineEdit()
+        folder_value = current_settings.get('data_folder', '')
+        self.folder_edit.setText(folder_value)
+        self.folder_edit.setPlaceholderText("Enter folder path for JSON files...")
+        self.folder_edit.textChanged.connect(self.validate_folder_path)
+        
+        # Status label for folder validation
+        self.folder_status_label = QLabel("")
+        self.folder_status_label.setWordWrap(True)
+        
+        folder_layout.addWidget(self.folder_edit)
+        folder_layout.addWidget(self.folder_status_label)
+        
+        form_layout.addRow("Data Folder:", folder_widget)
+        
+        # Alarm Monitor Selection
+        monitor_widget = QWidget()
+        monitor_layout = QVBoxLayout(monitor_widget)
+        monitor_layout.setContentsMargins(0, 0, 0, 0)
+        monitor_layout.setSpacing(5)
+        
+        self.monitor_combo = QComboBox()
+        self.monitor_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #2c2c54;
+                border: 2px solid #3742fa;
+                border-radius: 5px;
+                padding: 8px;
+                color: #ffffff;
+                font-size: 14px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #ffffff;
+            }d
+        """)
+        
+        # Populate monitor list
+        from PyQt6.QtGui import QGuiApplication
+        screens = QGuiApplication.screens()
+        for i, screen in enumerate(screens):
+            geometry = screen.geometry()
+            # Get the actual monitor name/manufacturer if available
+            monitor_name = screen.name() if hasattr(screen, 'name') and screen.name() else f"Monitor {i+1}"
+            # Create descriptive label with monitor name and resolution
+            label = f"{monitor_name} ({geometry.width()}x{geometry.height()})"
+            self.monitor_combo.addItem(label, i)
+        
+        # Set current selection
+        current_monitor = current_settings.get('alarm_monitor', 0)
+        if current_monitor < self.monitor_combo.count():
+            self.monitor_combo.setCurrentIndex(current_monitor)
+        
+        monitor_layout.addWidget(self.monitor_combo)
+        
+        # Monitor help text
+        monitor_help = QLabel("Monitor where fullscreen alarm will appear")
+        monitor_help.setStyleSheet("color: #888888; font-size: 12px;")
+        monitor_layout.addWidget(monitor_help)
+        
+        form_layout.addRow("Alarm Monitor:", monitor_widget)
+        layout.addLayout(form_layout)
+        
+        # CSV Operations Section
+        csv_group = QWidget()
+        csv_group.setStyleSheet("""
+            QWidget {
+                background-color: #2c2c54;
+                border: 1px solid #3742fa;
+                border-radius: 8px;
+                padding: 10px;
+            }
+        """)
+        csv_layout = QVBoxLayout(csv_group)
+        csv_layout.setContentsMargins(15, 15, 15, 15)
+        
+        csv_title = QLabel("CSV Operations:")
+        csv_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        csv_title.setStyleSheet("background: transparent; border: none; color: #ffffff;")
+        csv_layout.addWidget(csv_title)
+        
+        # CSV buttons layout
+        csv_buttons_layout = QHBoxLayout()
+        
+        # Export Acknowledgments button
+        self.export_ack_btn = QPushButton("Export Ack")
+        self.export_ack_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #1e8449;
+            }
+        """)
+        self.export_ack_btn.clicked.connect(self.export_to_csv_from_settings)
+        csv_buttons_layout.addWidget(self.export_ack_btn)
+        
+        # Export Config button
+        self.export_config_btn = QPushButton("Export Config")
+        self.export_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f39c12;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #f1c40f;
+            }
+            QPushButton:pressed {
+                background-color: #d68910;
+            }
+        """)
+        self.export_config_btn.clicked.connect(self.export_config_to_csv_from_settings)
+        csv_buttons_layout.addWidget(self.export_config_btn)
+        
+        # Import Config button
+        self.import_config_btn = QPushButton("Import Config")
+        self.import_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #ec7063;
+            }
+            QPushButton:pressed {
+                background-color: #c0392b;
+            }
+        """)
+        self.import_config_btn.clicked.connect(self.import_config_from_csv)
+        csv_buttons_layout.addWidget(self.import_config_btn)
+        
+        # Open CSV Folder button
+        self.open_folder_btn = QPushButton("Open CSV Folder")
+        self.open_folder_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9b59b6;
+                color: #ffffff;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 16px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #af7ac5;
+            }
+            QPushButton:pressed {
+                background-color: #7d3c98;
+            }
+        """)
+        self.open_folder_btn.clicked.connect(self.open_csv_folder)
+        csv_buttons_layout.addWidget(self.open_folder_btn)
+        
+        csv_layout.addLayout(csv_buttons_layout)
+        layout.addWidget(csv_group)
+        
+        # Buttons
+        self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.button_box.accepted.connect(lambda: self.save_settings_and_close(dialog, current_settings))
+        self.button_box.rejected.connect(dialog.reject)
+        layout.addWidget(self.button_box)
+        
+        dialog.setLayout(layout)
+        
+        # Initial validation
+        self.validate_folder_path()
+        
+        dialog.exec()
+    
+    def validate_folder_path(self):
+        """Validate the folder path in real-time"""
+        folder_path = self.folder_edit.text().strip()
+        
+        if not folder_path:
+            # Empty path is allowed (will use default)
+            self.folder_status_label.setText("Using default data locations")
+            self.folder_status_label.setProperty("class", "status-label")
+            self.folder_status_label.setStyleSheet("color: #999999; font-size: 12px;")
+            self.folder_edit.setProperty("class", "")
+            self.folder_edit.setStyleSheet("")
+            self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
+            return True
+        
+        # Check if path exists and is accessible
+        if os.path.exists(folder_path):
+            if os.path.isdir(folder_path):
+                # Check if we can write to this directory
+                try:
+                    test_file = os.path.join(folder_path, 'test_write.tmp')
+                    with open(test_file, 'w') as f:
+                        f.write('test')
+                    os.remove(test_file)
+                    
+                    self.folder_status_label.setText("✓ Valid folder with write access")
+                    self.folder_status_label.setProperty("class", "status-label status-valid")
+                    self.folder_status_label.setStyleSheet("color: #2ed573; background-color: #1b2d1b; font-size: 12px; padding: 5px; border-radius: 3px;")
+                    self.folder_edit.setProperty("class", "")
+                    self.folder_edit.setStyleSheet("")
+                    self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
+                    return True
+                except (PermissionError, OSError):
+                    self.folder_status_label.setText("✗ Folder exists but no write permission")
+                    self.folder_status_label.setProperty("class", "status-label status-invalid")
+                    self.folder_status_label.setStyleSheet("color: #ff4757; background-color: #3d1a1a; font-size: 12px; padding: 5px; border-radius: 3px;")
+                    self.folder_edit.setProperty("class", "error")
+                    self.folder_edit.setStyleSheet("border-color: #ff4757; background-color: #3d1a1a;")
+                    self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+                    return False
+            else:
+                self.folder_status_label.setText("✗ Path exists but is not a folder")
+                self.folder_status_label.setProperty("class", "status-label status-invalid")
+                self.folder_status_label.setStyleSheet("color: #ff4757; background-color: #3d1a1a; font-size: 12px; padding: 5px; border-radius: 3px;")
+                self.folder_edit.setProperty("class", "error")
+                self.folder_edit.setStyleSheet("border-color: #ff4757; background-color: #3d1a1a;")
+                self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+                return False
+        else:
+            self.folder_status_label.setText("✗ Folder does not exist")
+            self.folder_status_label.setProperty("class", "status-label status-invalid")
+            self.folder_status_label.setStyleSheet("color: #ff4757; background-color: #3d1a1a; font-size: 12px; padding: 5px; border-radius: 3px;")
+            self.folder_edit.setProperty("class", "error")
+            self.folder_edit.setStyleSheet("border-color: #ff4757; background-color: #3d1a1a;")
+            self.button_box.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
+            return False
+    
+    def load_settings(self):
+        """Load settings from settings.json"""
+        try:
+            settings_path = os.path.join(os.path.dirname(__file__), 'settings.json')
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    # Ensure we have default values for missing keys
+                    return {
+                        'username': settings.get('username', ''),
+                        'data_folder': settings.get('data_folder', '')
+                    }
+        except Exception:
+            pass
+        return {'username': '', 'data_folder': ''}
+    
+    def save_settings_and_close(self, dialog, original_settings):
+        """Save settings with validation and preserve existing values"""
+        try:
+            # Get new values
+            new_username = self.username_edit.text().strip()
+            new_folder = self.folder_edit.text().strip()
+            
+            # Validate folder if provided
+            if new_folder and not self.validate_folder_path():
+                QMessageBox.warning(self, "Invalid Folder", 
+                                   "Please fix the folder path before saving.")
+                return
+            
+            # Preserve existing values if new ones are empty (except for intentional clearing)
+            final_username = new_username if new_username else original_settings.get('username', '')
+            final_folder = new_folder  # Allow empty folder (uses defaults)
+            final_monitor = self.monitor_combo.currentData() if hasattr(self, 'monitor_combo') else 0
+            
+            settings = {
+                'username': final_username,
+                'data_folder': final_folder,
+                'alarm_monitor': final_monitor
+            }
+            
+            settings_path = os.path.join(os.path.dirname(__file__), 'settings.json')
+            with open(settings_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2)
+            
+            QMessageBox.information(self, "Settings", "Settings saved successfully!")
+            dialog.accept()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to save settings: {e}")
+    
+    def closeEvent(self, event):
+        """Handle window close event with proper cleanup"""
+        # Stop all alarms first
+        self.stop_all_alarms()
+        
+        # Stop all timers
+        if self.clock_timer:
+            self.clock_timer.stop()
+            self.clock_timer = None
+        if self.refresh_timer:
+            self.refresh_timer.stop()
+            self.refresh_timer = None
+        if self.flash_timer:
+            self.flash_timer.stop()
+            self.flash_timer = None
+        if self.pause_timer:
+            self.pause_timer.stop()
+            self.pause_timer = None
+        
+        # Clean up status cards
+        for card in self.status_cards.values():
+            card.setParent(None)
+        self.status_cards.clear()
+        
+        # Accept the close event
+        event.accept()
+    
+    def acknowledge_time_slot(self, time_str):
+        """Acknowledge all items in a time slot"""
+        if time_str not in self.status_cards:
+            return
+            
+        card = self.status_cards[time_str]
+        if not card.manifests:
+            return
+        
+        # Set flag to prevent window restoration during acknowledgment
+        self.acknowledging_in_progress = True
+        
+        # Get username from settings
+        settings = self.load_settings()
+        username = settings.get('username', '').strip()
+        
+        if not username:
+            self.acknowledging_in_progress = False
+            QMessageBox.warning(self, "No Username", 
+                              "Please set your username in Settings before acknowledging.")
+            return
+        
+        # Determine if this is a late acknowledgment (any missed items)
+        has_missed = any(status == "Missed" for _, status in card.manifests)
+        
+        # Save acknowledgments immediately
+        try:
+            current_time = datetime.now()
+            today = current_time.date().isoformat()
+            timestamp = current_time.isoformat()
+            
+            # Load existing acknowledgments using centralized path method
+            ack_path = self.get_ack_path()
+            
+            # Load existing data
+            ack_data = []
+            if os.path.exists(ack_path):
+                try:
+                    with open(ack_path, 'r', encoding='utf-8') as f:
+                        ack_data = json.load(f)
+                except:
+                    ack_data = []
+            
+            # Add acknowledgments for all carriers in this time slot
+            for carrier, status in card.manifests:
+                # Check if already acknowledged
+                existing_ack = None
+                for ack in ack_data:
+                    if (ack.get('date') == today and 
+                        ack.get('manifest_time') == time_str and 
+                        ack.get('carrier') == carrier):
+                        existing_ack = ack
+                        break
+                
+                if not existing_ack:
+                    # Add new acknowledgment
+                    ack_entry = {
+                        'date': today,
+                        'manifest_time': time_str,
+                        'carrier': carrier,
+                        'user': username,
+                        'reason': 'Done Late' if has_missed else '',
+                        'timestamp': timestamp
+                    }
+                    ack_data.append(ack_entry)
+            
+            # Save to file
+            with open(ack_path, 'w', encoding='utf-8') as f:
+                json.dump(ack_data, f, indent=2)
+            
+            # Refresh display immediately to show changes
+            self.populate_data()
+            
+            # Clear acknowledgment flag after data refresh
+            self.acknowledging_in_progress = False
+            
+            # No success dialog - visual feedback from card color change is sufficient
+            
+        except Exception as e:
+            self.acknowledging_in_progress = False
+            QMessageBox.warning(self, "Error", f"Failed to save acknowledgment: {e}")
+    
+    def acknowledge_single_carrier(self, time_str, carrier):
+        """Acknowledge a single carrier for a specific time"""
+        # Set flag to prevent window restoration during acknowledgment
+        self.acknowledging_in_progress = True
+        
+        # Get username from settings
+        settings = self.load_settings()
+        username = settings.get('username', '').strip()
+        
+        if not username:
+            self.acknowledging_in_progress = False
+            QMessageBox.warning(self, "No Username", 
+                              "Please set your username in Settings before acknowledging.")
+            return
+        
+        # Determine if this is a late acknowledgment based on card status
+        is_late = False
+        if time_str in self.status_cards:
+            card = self.status_cards[time_str]
+            # Check if this specific carrier is in missed status
+            for car, status in card.manifests:
+                if car == carrier and status == "Missed":
+                    is_late = True
+                    break
+        
+        try:
+            current_time = datetime.now()
+            today = current_time.date().isoformat()
+            timestamp = current_time.isoformat()
+            
+            # Load existing acknowledgments using centralized path method
+            ack_path = self.get_ack_path()
+            
+            # Load existing data
+            ack_data = []
+            if os.path.exists(ack_path):
+                try:
+                    with open(ack_path, 'r', encoding='utf-8') as f:
+                        ack_data = json.load(f)
+                except:
+                    ack_data = []
+            
+            # Check if already acknowledged
+            existing_ack = None
+            for ack in ack_data:
+                if (ack.get('date') == today and 
+                    ack.get('manifest_time') == time_str and 
+                    ack.get('carrier') == carrier):
+                    existing_ack = ack
+                    break
+            
+            if not existing_ack:
+                # Add new acknowledgment
+                ack_entry = {
+                    'date': today,
+                    'manifest_time': time_str,
+                    'carrier': carrier,
+                    'user': username,
+                    'reason': 'Done Late' if is_late else '',
+                    'timestamp': timestamp
+                }
+                ack_data.append(ack_entry)
+                
+                # Save to file
+                with open(ack_path, 'w', encoding='utf-8') as f:
+                    json.dump(ack_data, f, indent=2)
+                
+                # Refresh display immediately to show changes
+                self.populate_data()
+                
+                # Clear acknowledgment flag after data refresh
+                self.acknowledging_in_progress = False
+            else:
+                # Clear acknowledgment flag if no new acknowledgment was made
+                self.acknowledging_in_progress = False
+            
+        except Exception as e:
+            self.acknowledging_in_progress = False
+            QMessageBox.warning(self, "Error", f"Failed to save acknowledgment: {e}")
 
-    def _switch_to_monitor(self, monitor_index):
-        """Switch window to specific monitor by index"""
-        from PyQt5.QtWidgets import QApplication
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and previous window state"""
+        if self.isFullScreen():
+            # From fullscreen -> restore to previous state
+            if self.previous_window_state == Qt.WindowState.WindowMaximized:
+                self.showMaximized()
+            else:
+                self.showNormal()
+            # Set icon immediately for non-fullscreen state (can go fullscreen)
+            self.fullscreen_btn.setText("⛶")
+        else:
+            # From normal or maximized -> fullscreen
+            # Remember current state before going fullscreen
+            if self.isMaximized():
+                self.previous_window_state = Qt.WindowState.WindowMaximized
+            else:
+                self.previous_window_state = Qt.WindowState.WindowNoState
+            
+            self.showFullScreen()
+            # Set icon immediately for fullscreen state (can restore)
+            self.fullscreen_btn.setText("🗗")
+
+    def update_fullscreen_icon(self):
+        """Update fullscreen button icon based on current window state"""
+        # Use a delayed check to ensure window state has fully changed
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._delayed_icon_update)
+    
+    def _delayed_icon_update(self):
+        """Delayed icon update to ensure accurate state detection"""
+        if self.isFullScreen():
+            self.fullscreen_btn.setText("🗗")  # Restore icon (can exit fullscreen)
+        else:
+            self.fullscreen_btn.setText("⛶")  # Fullscreen icon (can go fullscreen)
+
+    def show_monitor_menu(self):
+        """Show monitor selection menu"""
+        from PyQt6.QtWidgets import QMenu
+        
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1a1a2e;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 8px;
+                padding: 5px;
+                font-size: 14px;
+            }
+            QMenu::item {
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #3742fa;
+            }
+        """)
+        
+        # Get available screens
         screens = QApplication.screens()
         
-        if 0 <= monitor_index < len(screens):
-            target_screen = screens[monitor_index]
+        for i, screen in enumerate(screens):
+            # Get screen geometry and name
+            geometry = screen.geometry()
+            name = screen.name() if hasattr(screen, 'name') and screen.name() else f"Monitor {i+1}"
+            resolution = f"{geometry.width()}x{geometry.height()}"
             
-            # Remember current state
-            was_fullscreen = bool(self.windowState() & Qt.WindowFullScreen)
-            was_maximized = bool(self.windowState() & Qt.WindowMaximized)
-            
-            # Move to target screen center
-            screen_rect = target_screen.availableGeometry()
-            self.move(screen_rect.center() - self.rect().center())
-            
-            # Restore window state on new monitor
-            if was_fullscreen:
-                self.setWindowState(Qt.WindowFullScreen)
-            elif was_maximized:
-                self.setWindowState(Qt.WindowMaximized)
-            
-            # Refresh tray menu to update current monitor indicator
-            self._create_tray_menu()
+            action_text = f"{name} ({resolution})"
+            action = menu.addAction(action_text)
+            action.triggered.connect(lambda checked, idx=i: self.move_to_monitor(idx))
+        
+        # Show menu at button position
+        button_pos = self.monitor_btn.mapToGlobal(self.monitor_btn.rect().bottomLeft())
+        menu.exec(button_pos)
 
-    def _preserve_window_state_after_ack(self):
-        """Preserve window state after acknowledgment without disrupting fullscreen mode"""
-        self._ensure_window_visibility()
-
-    def _ensure_window_visibility(self):
-        """Ensure window is visible and focused without disrupting fullscreen/maximized state"""
-        current_state = self.windowState()
-        
-        # State-aware window visibility - NEVER use show() in fullscreen/maximized
-        if current_state & Qt.WindowFullScreen:
-            # In fullscreen - never call show() as it breaks fullscreen mode
-            self.raise_()
-            self.activateWindow()
-        elif current_state & Qt.WindowMaximized:
-            # In maximized - never call show() as it can cause window shift
-            self.raise_()
-            self.activateWindow()
-        else:
-            # Normal window state - safe to use show()
-            self.show()
-            self.raise_()
-            self.activateWindow()
-
-    def _show_input_dialog_with_state_preservation(self, title, prompt):
-        """Show input dialog while preserving parent window state"""
-        from PyQt5.QtWidgets import QInputDialog
-        
-        # Store current window state before showing dialog
-        current_state = self.windowState()
-        current_flags = self.windowFlags()
-        
-        # Show the input dialog
-        text, ok = QInputDialog.getText(self, title, prompt)
-        
-        # Restore window state after dialog closes
-        if current_state & Qt.WindowFullScreen:
-            # Restore fullscreen mode
-            self.setWindowState(Qt.WindowFullScreen)
-            self.raise_()
-            self.activateWindow()
-        elif current_state & Qt.WindowMaximized:
-            # Restore maximized mode  
-            self.setWindowState(Qt.WindowMaximized)
-            self.raise_()
-            self.activateWindow()
-        else:
-            # Normal state - use standard visibility
-            self._ensure_window_visibility()
-        
-        return text, ok
-
-    def _show_int_dialog_with_state_preservation(self, title, prompt, value=0, min_val=0, max_val=100):
-        """Show integer input dialog while preserving parent window state"""
-        from PyQt5.QtWidgets import QInputDialog
-        
-        # Store current window state before showing dialog
-        current_state = self.windowState()
-        current_flags = self.windowFlags()
-        
-        # Show the integer input dialog
-        number, ok = QInputDialog.getInt(self, title, prompt, value=value, min=min_val, max=max_val)
-        
-        # Restore window state after dialog closes
-        if current_state & Qt.WindowFullScreen:
-            # Restore fullscreen mode
-            self.setWindowState(Qt.WindowFullScreen)
-            self.raise_()
-            self.activateWindow()
-        elif current_state & Qt.WindowMaximized:
-            # Restore maximized mode  
-            self.setWindowState(Qt.WindowMaximized)
-            self.raise_()
-            self.activateWindow()
-        else:
-            # Normal state - use standard visibility
-            self._ensure_window_visibility()
-        
-        return number, ok
-
-    def _show_message_with_state_preservation(self, icon, title, text):
-        """Show message box while preserving parent window state"""
-        from PyQt5.QtWidgets import QMessageBox
-        
-        # Store current window state before showing dialog
-        current_state = self.windowState()
-        current_flags = self.windowFlags()
-        
-        # Show the message box
-        if icon == "information":
-            QMessageBox.information(self, title, text)
-        elif icon == "warning":
-            QMessageBox.warning(self, title, text)
-        elif icon == "critical":
-            QMessageBox.critical(self, title, text)
-        
-        # Restore window state after dialog closes
-        if current_state & Qt.WindowFullScreen:
-            # Restore fullscreen mode
-            self.setWindowState(Qt.WindowFullScreen)
-            self.raise_()
-            self.activateWindow()
-        elif current_state & Qt.WindowMaximized:
-            # Restore maximized mode  
-            self.setWindowState(Qt.WindowMaximized)
-            self.raise_()
-            self.activateWindow()
-        else:
-            # Normal state - use standard visibility
-            self._ensure_window_visibility()
-
-    def update_all_tree_item_colors(self, base_text_color):
-        """Update all tree item colors to work with the current background"""
-        # Define colors based on current background
-        if base_text_color == "white":
-            # Red background - use white/light colors for visibility
-            open_color = QColor(200, 200, 255)      # Light blue
-            active_color = QColor(255, 255, 255)    # White 
-            missed_color = QColor(255, 200, 200)    # Light red/pink
-            ack_color = QColor(200, 255, 200)       # Light green
-            ack_late_color = QColor(255, 255, 150)  # Light yellow
-            group_color_default = QColor(0, 0, 0)   # Black for group headers during alerts
-        else:
-            # White background - use original colors
-            open_color = QColor(38, 132, 255)       # Jira blue
-            active_color = QColor(255, 0, 0)        # Red
-            missed_color = QColor(139, 0, 0)        # DarkRed
-            ack_color = QColor(0, 200, 0)           # Green
-            ack_late_color = QColor(255, 140, 0)    # Orange
-            group_color_default = QColor(38, 132, 255)  # Blue default for normal state
-        
-        # Update all items in the tree
-        for i in range(self.tree_widget.topLevelItemCount()):
-            group = self.tree_widget.topLevelItem(i)
-            
-            # Determine group header color based on its contents (highest priority status)
-            group_color = group_color_default  # Default
-            has_active = False
-            has_missed = False
-            has_ack_late = False
-            has_ack = False
-            has_open = False
-            
-            # Check what types of manifests this group contains
-            for j in range(group.childCount()):
-                child = group.child(j)
-                child_text = child.text(0)
+    def move_to_monitor(self, monitor_index):
+        """Move window to specified monitor"""
+        try:
+            screens = QApplication.screens()
+            if 0 <= monitor_index < len(screens):
+                target_screen = screens[monitor_index]
                 
-                if "- Active" in child_text:
-                    has_active = True
-                elif "- Missed" in child_text and "Acknowledged" not in child_text:
-                    has_missed = True
-                elif "- Acknowledged Late" in child_text:
-                    has_ack_late = True
-                elif "- Acknowledged" in child_text:
-                    has_ack = True
-                elif "- Open" in child_text:
-                    has_open = True
-            
-            # Set group color by priority: Active > Missed > Ack Late > Ack > Open
-            if has_active:
-                group_color = active_color if base_text_color != "white" else group_color_default
-            elif has_missed:
-                group_color = missed_color if base_text_color != "white" else group_color_default
-            elif has_ack_late:
-                group_color = ack_late_color if base_text_color != "white" else group_color_default
-            elif has_ack:
-                group_color = ack_color if base_text_color != "white" else group_color_default
-            elif has_open:
-                group_color = open_color if base_text_color != "white" else group_color_default
-            
-            group.setForeground(0, group_color)
-            
-            # Update all children in this group
-            for j in range(group.childCount()):
-                child = group.child(j)
-                child_text = child.text(0)
+                # Get screen geometry
+                screen_geometry = target_screen.geometry()
                 
-                # Set appropriate color based on status
-                if "- Open" in child_text:
-                    child.setForeground(0, open_color)
-                elif "- Active" in child_text:
-                    # Set Active items color - flashing logic will override during flash cycles
-                    child.setForeground(0, active_color)
-                elif "- Missed" in child_text and "Acknowledged" not in child_text:
-                    child.setForeground(0, missed_color)
-                elif "- Acknowledged Late" in child_text:
-                    child.setForeground(0, ack_late_color)
-                elif "- Acknowledged" in child_text:
-                    child.setForeground(0, ack_color)
+                # If fullscreen, exit fullscreen first, move, then re-enter fullscreen
+                was_fullscreen = self.isFullScreen()
+                if was_fullscreen:
+                    self.showNormal()
+                
+                # Move window to center of target screen
+                window_size = self.size()
+                new_x = screen_geometry.x() + (screen_geometry.width() - window_size.width()) // 2
+                new_y = screen_geometry.y() + (screen_geometry.height() - window_size.height()) // 2
+                
+                self.move(new_x, new_y)
+                
+                # Re-enter fullscreen if it was fullscreen before
+                if was_fullscreen:
+                    self.showFullScreen()
+                
+                # Update icon to reflect current state
+                self.update_fullscreen_icon()
+                    
+        except Exception as e:
+            print(f"Error moving to monitor {monitor_index}: {e}")
+    
+    def export_to_csv(self):
+        """Export acknowledgment data to CSV file (deprecated - use export_to_csv_from_settings)"""
+        QMessageBox.information(self, "Feature Moved", 
+                              "CSV export functionality has been moved to Settings.\nPlease use the ⚙️ Settings button.")
+    
+    def export_config_to_csv(self):
+        """Export config data to CSV file (deprecated - use export_config_to_csv_from_settings)"""
+        QMessageBox.information(self, "Feature Moved", 
+                              "CSV export functionality has been moved to Settings.\nPlease use the ⚙️ Settings button.")
+    
+    def get_csv_folder_path(self):
+        """Get the CSV folder path based on settings"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            return None
+            
+        csv_folder = os.path.join(data_folder, 'csv')
+        return csv_folder
+    
+    def ensure_csv_folder_exists(self):
+        """Ensure CSV folder exists, create if needed"""
+        csv_folder = self.get_csv_folder_path()
+        if not csv_folder:
+            return False
+            
+        try:
+            os.makedirs(csv_folder, exist_ok=True)
+            return True
+        except Exception:
+            return False
+    
+    def export_to_csv_from_settings(self):
+        """Export acknowledgment data to CSV in data folder and open Excel"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings before exporting.")
+            return
+        
+        if not self.ensure_csv_folder_exists():
+            QMessageBox.critical(self, "Folder Error", 
+                               "Could not create CSV folder in data directory.")
+            return
+        
+        try:
+            # Load acknowledgment data
+            ack_path = self.get_acknowledgments_path()
+            if not os.path.exists(ack_path):
+                QMessageBox.information(self, "No Data", "No acknowledgment data found to export.")
+                return
+            
+            with open(ack_path, 'r') as f:
+                ack_data = json.load(f)
+            
+            if not ack_data:
+                QMessageBox.information(self, "No Data", "No acknowledgment data found to export.")
+                return
+            
+            # Generate filename with current date
+            current_date = datetime.now().strftime("%d%m%Y")
+            filename = f"manifest_ack-{current_date}.csv"
+            csv_folder = self.get_csv_folder_path()
+            file_path = os.path.join(csv_folder, filename)
+            
+            # Export CSV data
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Write header
+                writer.writerow(['Date', 'Time', 'Carrier', 'User', 'Reason', 'Timestamp'])
+                
+                # Handle list format (correct format used by the system)
+                if isinstance(ack_data, list):
+                    for ack_item in ack_data:
+                        if isinstance(ack_item, dict):
+                            date = ack_item.get('date', '')
+                            time = ack_item.get('manifest_time', '')
+                            carrier = ack_item.get('carrier', '')
+                            user = ack_item.get('user', '')
+                            reason = ack_item.get('reason', '')
+                            timestamp = ack_item.get('timestamp', '')
+                            
+                            writer.writerow([date, time, carrier, user, reason, timestamp])
+                else:
+                    # Handle old nested dictionary format for backward compatibility
+                    for date_key, date_data in ack_data.items():
+                        if isinstance(date_data, dict):
+                            for time_key, time_data in date_data.items():
+                                if isinstance(time_data, dict):
+                                    user = time_data.get('user', '')
+                                    reason = time_data.get('reason', '')
+                                    timestamp = time_data.get('timestamp', '')
+                                    
+                                    writer.writerow([date_key, time_key, '', user, reason, timestamp])
+            
+            # Open in Excel
+            self.open_file_in_excel(file_path)
+            
+            QMessageBox.information(self, "Export Complete", 
+                                  f"Data exported successfully to:\n{file_path}\n\nOpening in Excel...")
+            
+        except PermissionError as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export acknowledgment data:\n\n"
+                               f"The file may be open in Excel or another program.\n"
+                               f"Please close the file and try again.\n\n"
+                               f"File: {file_path}\n"
+                               f"Error: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export acknowledgment data:\n\n{str(e)}")
+    
+    def export_config_to_csv_from_settings(self):
+        """Export config data to CSV in data folder and open Excel"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings before exporting.")
+            return
+        
+        if not self.ensure_csv_folder_exists():
+            QMessageBox.critical(self, "Folder Error", 
+                               "Could not create CSV folder in data directory.")
+            return
+        
+        try:
+            # Load config data
+            config = self.load_config()
+            
+            if not config or not config.get('manifests'):
+                QMessageBox.information(self, "No Data", "No manifest configuration data found to export.")
+                return
+            
+            # Generate filename with current date
+            current_date = datetime.now().strftime("%d%m%Y")
+            filename = f"manifest_config-{current_date}.csv"
+            csv_folder = self.get_csv_folder_path()
+            file_path = os.path.join(csv_folder, filename)
+            
+            # Export in importable format
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Write header matching import format
+                writer.writerow(['time', 'carriers'])
+                
+                # Write data rows in importable format
+                manifests = config.get('manifests', [])
+                for manifest in manifests:
+                    time_slot = manifest.get('time', '')
+                    carriers = manifest.get('carriers', [])
+                    # Join carriers with semicolon for easy import parsing
+                    carriers_str = ';'.join(carriers) if carriers else ''
+                    
+                    writer.writerow([time_slot, carriers_str])
+            
+            # Open in Excel
+            self.open_file_in_excel(file_path)
+            
+            QMessageBox.information(self, "Export Complete", 
+                                  f"Configuration exported successfully to:\n{file_path}\n\nFormat: time,carriers (semicolon-separated)\nThis file can be imported back into the system.\n\nOpening in Excel...")
+            
+        except PermissionError as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export configuration data:\n\n"
+                               f"The file may be open in Excel or another program.\n"
+                               f"Please close the file and try again.\n\n"
+                               f"File: {file_path}\n"
+                               f"Error: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", 
+                               f"Failed to export configuration data:\n\n{str(e)}")
+    
+    def open_file_in_excel(self, file_path):
+        """Open file in Excel or default CSV application"""
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == 'Windows':
+                os.startfile(file_path)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.call(['open', file_path])
+            else:  # Linux
+                subprocess.call(['xdg-open', file_path])
+        except Exception as e:
+            print(f"Could not open file in Excel: {e}")
+    
+    def open_csv_folder(self):
+        """Open the CSV folder in file explorer"""
+        csv_folder = self.get_csv_folder_path()
+        
+        if not csv_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings first.")
+            return
+        
+        if not os.path.exists(csv_folder):
+            if not self.ensure_csv_folder_exists():
+                QMessageBox.critical(self, "Folder Error", 
+                                   "Could not create CSV folder.")
+                return
+        
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == 'Windows':
+                os.startfile(csv_folder)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.call(['open', csv_folder])
+            else:  # Linux
+                subprocess.call(['xdg-open', csv_folder])
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not open folder:\n{str(e)}")
+    
+    def create_backup_config(self):
+        """Create timestamped backup of current config"""
+        try:
+            settings = self.load_settings()
+            data_folder = settings.get('data_folder', '').strip()
+            
+            if not data_folder:
+                return False
+            
+            # Create backup folder if it doesn't exist
+            backup_folder = os.path.join(data_folder, 'backup')
+            os.makedirs(backup_folder, exist_ok=True)
+            
+            # Get current config path
+            config_path = os.path.join(data_folder, 'config.json')
+            if not os.path.exists(config_path):
+                return False
+            
+            # Create timestamped backup
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"config_backup_{timestamp}.json"
+            backup_path = os.path.join(backup_folder, backup_filename)
+            
+            # Copy file
+            import shutil
+            shutil.copy2(config_path, backup_path)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Backup creation failed: {e}")
+            return False
+    
+    def import_config_from_csv(self):
+        """Import configuration from CSV file with backup"""
+        settings = self.load_settings()
+        data_folder = settings.get('data_folder', '').strip()
+        
+        if not data_folder:
+            QMessageBox.warning(self, "No Data Folder", 
+                              "Please set a data folder in settings before importing.")
+            return
+        
+        # Open file dialog in the CSV folder
+        csv_folder = os.path.join(data_folder, 'csv')
+        if not os.path.exists(csv_folder):
+            csv_folder = data_folder  # Fallback to data folder
+        
+        # Get CSV file from user
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Configuration",
+            csv_folder,  # Start in CSV folder
+            "CSV files (*.csv);;All files (*.*)"
+        )
+        
+        if not file_path:
+            return  # User cancelled
+        
+        try:
+            # Create backup first
+            if not self.create_backup_config():
+                if not QMessageBox.question(self, "Backup Failed", 
+                                           "Could not create backup. Continue with import?",
+                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                    return
+            
+            # Read CSV file
+            manifests = []
+            with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
+                reader = csv.reader(csvfile)
+                
+                # Skip header
+                next(reader, None)
+                
+                for row in reader:
+                    if len(row) >= 2:
+                        time_slot = row[0].strip()
+                        carriers_str = row[1].strip()
+                        
+                        # Parse carriers (semicolon-separated)
+                        if carriers_str:
+                            carriers = [c.strip() for c in carriers_str.split(';') if c.strip()]
+                        else:
+                            carriers = []
+                        
+                        if time_slot and carriers:
+                            manifests.append({
+                                "time": time_slot,
+                                "carriers": carriers
+                            })
+            
+            if not manifests:
+                QMessageBox.warning(self, "Import Error", "No valid manifest data found in CSV file.")
+                return
+            
+            # Create new config
+            new_config = {
+                "manifests": manifests
+            }
+            
+            # Save new config
+            config_path = os.path.join(data_folder, 'config.json')
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(new_config, f, indent=2)
+            
+            # Refresh display
+            self.populate_data()
+            
+            QMessageBox.information(self, "Import Complete", 
+                                  f"Configuration imported successfully!\n\nImported {len(manifests)} manifest time slots.\nBackup created in backup folder.")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", f"Failed to import configuration:\n{str(e)}")
 
-    def show_settings(self):
-        """Show the settings dialog for configuring acknowledgment name and data storage locations"""
-        from settings_manager import SettingsDialog, get_settings_manager
-        
-        settings_manager = get_settings_manager()
-        dialog = SettingsDialog(settings_manager, self)
-        
-        if dialog.exec_() == SettingsDialog.Accepted:
-            # Settings were saved, optionally reload config
-            from PyQt5.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self,
-                "Reload Configuration?",
-                "Settings have been updated. Would you like to reload the configuration now?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-            if reply == QMessageBox.Yes:
-                self.reload_config()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = AlertDisplay()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
