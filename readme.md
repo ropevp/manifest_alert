@@ -1,6 +1,6 @@
 # Manifest Alert System V2
 
-**Warehouse-grade PyQt6 desktop application for shipping manifest alerts with modern SpaceX-style UI.**
+**Desktop application for shipping manifest alerts with modern dark theme UI.**
 
 ## 🚀 Quick Installation
 
@@ -28,9 +28,9 @@ INSTALL.bat
 - Internet connection for initial setup
 
 **Installation:**
-- Use `INSTALL.bat` - handles everything automatically
+- Use `INSTALL.bat` - handles setup automatically
 - Creates virtual environment for dependency isolation
-- Installs professional Windows shortcuts (Desktop + Start Menu)
+- Installs Windows shortcuts (Desktop + Start Menu)
 - Future updates: run `INSTALL.bat` again in same directory
 
 ## 🔄 Updates
@@ -44,10 +44,10 @@ The installer detects existing installations and updates automatically.
 
 ## 🎯 Features
 
-- **Modern UI**: SpaceX-style mission control interface with card-based layout
-- **Real-time Sync**: Multi-PC acknowledgment system via shared data folders
-- **TV Optimized**: Large fonts and high contrast for warehouse displays
-- **Professional Integration**: Windows shortcuts and taskbar integration
+- **Modern UI**: Dark theme interface with card-based layout
+- **Multi-PC Sync**: Shared data folders for acknowledgment synchronization
+- **Large Display**: Readable fonts and high contrast for warehouse displays
+- **Windows Integration**: Desktop shortcuts and taskbar integration
 
 ## 📂 File Structure
 
@@ -84,10 +84,10 @@ python -m venv .venv
 
 ## 📋 Architecture
 
-- **PyQt6**: Modern Qt6 framework with card-based UI
-- **JSON Storage**: Simple file-based configuration and acknowledgments
-- **Git Updates**: Automatic version management via GitHub
-- **Virtual Environment**: Isolated dependencies for reliability
+- **PyQt6**: Qt6 framework with card-based UI
+- **JSON Storage**: File-based configuration and acknowledgments
+- **Git Updates**: Version management via GitHub
+- **Virtual Environment**: Isolated dependencies
 
 ---
 
