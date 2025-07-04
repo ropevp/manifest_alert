@@ -27,7 +27,7 @@ echo [1/4] Checking prerequisites...
 
 REM Check if Git is installed
 git --version >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ERROR: Git is not installed
     echo Please install Git from: https://git-scm.com/download/win
     echo After installing Git, run this script again
@@ -37,7 +37,7 @@ if %errorlevel% neq 0 (
 
 REM Check if Python is installed
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ERROR: Python is not installed
     echo Please install Python from: https://python.org
     echo Make sure to check "Add Python to PATH" during installation
@@ -50,7 +50,7 @@ echo Git and Python are available
 echo.
 echo [2/4] Downloading Manifest Alert System...
 git clone https://github.com/ropevp/manifest_alert.git .
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ERROR: Failed to download from GitHub
     echo Check your internet connection and try again
     pause
@@ -61,7 +61,7 @@ echo.
 echo [3/4] Setting up virtual environment and dependencies...
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ERROR: Failed to install dependencies
     pause
     exit /b 1
@@ -98,7 +98,7 @@ echo.
 echo [2/4] Downloading latest version...
 git fetch origin
 git reset --hard origin/main
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ERROR: Failed to download updates
     echo Check your internet connection and try again
     pause
@@ -109,7 +109,7 @@ echo.
 echo [3/4] Updating dependencies...
 if exist ".venv\Scripts\python.exe" (
     .venv\Scripts\pip install -r requirements.txt
-    if %errorlevel% neq 0 (
+    if errorlevel 1 (
         echo ERROR: Failed to install dependencies
         echo This usually means a package version is incompatible
         echo Try deleting .venv folder and running this installer again
@@ -120,7 +120,7 @@ if exist ".venv\Scripts\python.exe" (
     echo Creating virtual environment...
     python -m venv .venv
     .venv\Scripts\pip install -r requirements.txt
-    if %errorlevel% neq 0 (
+    if errorlevel 1 (
         echo ERROR: Failed to install dependencies
         echo This usually means a package version is incompatible
         pause
