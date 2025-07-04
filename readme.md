@@ -6,26 +6,18 @@
 
 ### For End Users (Warehouse Staff)
 
-**Option 1: Bootstrap Installer (Recommended for Google Drive sharing)**
-1. Download: [BOOTSTRAP_INSTALL.bat](https://raw.githubusercontent.com/e10120323/manifest_alerts/main/BOOTSTRAP_INSTALL.bat)
-2. Run from anywhere (USB, Google Drive, Downloads folder)
-3. Automatically installs to `C:\ManifestAlerts`
-4. Use desktop shortcut to launch
-
-**Option 2: Manual Download & Install**
-1. Download: [INSTALL.bat](https://raw.githubusercontent.com/e10120323/manifest_alerts/main/INSTALL.bat)
-2. Create empty folder (e.g. `C:\ManifestAlerts`)
-3. Put `INSTALL.bat` in the empty folder
-4. Double-click `INSTALL.bat`
-5. Use desktop shortcut to launch
-
-**Option 3: Command Line Install**
+**Simple 3-Command Installation:**
 ```cmd
-mkdir C:\ManifestAlerts
+git clone https://github.com/ropevp/manifest_alert.git C:\ManifestAlerts
 cd C:\ManifestAlerts
-curl -o INSTALL.bat https://raw.githubusercontent.com/e10120323/manifest_alerts/main/INSTALL.bat
 INSTALL.bat
 ```
+
+**What this does:**
+1. Downloads the complete system to `C:\ManifestAlerts`
+2. Sets up virtual environment and dependencies
+3. Creates desktop and Start Menu shortcuts
+4. Ready to use!
 
 ### For IT Deployment
 
@@ -44,9 +36,11 @@ INSTALL.bat
 ## 🔄 Updates
 
 To update an existing installation:
-1. Navigate to installation folder
-2. Double-click `INSTALL.bat` (or run in Command Prompt)
-3. Installer detects existing installation and updates automatically
+```cmd
+cd C:\ManifestAlerts
+INSTALL.bat
+```
+The installer detects existing installations and updates automatically.
 
 ## 🎯 Features
 
