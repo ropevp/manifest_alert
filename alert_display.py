@@ -842,8 +842,11 @@ class AlertDisplay(QWidget):
         if self.alert_sound:
             self.alert_sound.stop()
         
-        # Only restore window state if NO alerts are active AND not in the middle of acknowledging
-        if not getattr(self, 'alert_active', False) and not getattr(self, 'acknowledging_in_progress', False):
+        # Only restore window state if NO alerts are active AND an alarm was actually triggered
+        # (Don't restore if user manually changed window state)
+        if (not getattr(self, 'alert_active', False) and 
+            not getattr(self, 'acknowledging_in_progress', False) and
+            hasattr(self, 'alarm_previous_state')):
             self.restore_alarm_display()
             
         # Ensure normal background
@@ -928,7 +931,8 @@ class AlertDisplay(QWidget):
                 # Fallback to normal window if restore fails
                 self.showNormal()
         else:
-            print("DEBUG: No alarm_previous_state found")
+            # No alarm_previous_state found - first run
+            pass
     
     def do_alarm_fullscreen(self):
         """Complete the fullscreen transition for alarm (called after positioning)"""
@@ -1117,12 +1121,12 @@ class AlertDisplay(QWidget):
             # Process carriers for this time - determine overall time slot status first
             manifest_data = []
             time_slot_status = get_manifest_status(time_str, now)
-            print(f"DEBUG: Processing time {time_str}, time_slot_status={time_slot_status}")
+            # Processing time slot for acknowledgment check
             
             for carrier in manifest.get('carriers', []):
                 ack_key = f"{today}_{time_str}_{carrier}"
                 is_acked = ack_key in acks
-                print(f"DEBUG: Carrier {carrier}, ack_key={ack_key}, is_acked={is_acked}")
+                # Check acknowledgment status for active/missed items
                 
                 if is_acked:
                     # Check if it was a late acknowledgment
@@ -1156,9 +1160,7 @@ class AlertDisplay(QWidget):
             row += 1
         
         # Update alert state
-        print(f"DEBUG populate_data: active_count={active_count}, missed_count={missed_count}, open_count={open_count}, acked_count={acked_count}")
         self.alert_active = (active_count > 0 or missed_count > 0)
-        print(f"DEBUG populate_data: alert_active={self.alert_active}")
         
         # Update refresh timer interval based on alert state
         self.update_refresh_timer()
