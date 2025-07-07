@@ -13,7 +13,7 @@ This is a **warehouse-grade PyQt6 desktop application** for shipping manifest al
 
 ## 🎨 V2 Modern UI Design Principles
 
-### SpaceX-Style Mission Control Interface
+### Dark Theme - Mission Control Interface
 - **Dark theme**: Deep space background (#0f0f23) with bright accent colors
 - **Card-based layout**: 320x200px status cards in responsive 3-column grid
 - **Large typography**: TV-optimized fonts (36pt title, 32pt clock, 28pt headers)
