@@ -843,15 +843,8 @@ class AlertDisplay(QWidget):
             self.alert_sound.stop()
         
         # Only restore window state if NO alerts are active AND not in the middle of acknowledging
-        print(f"DEBUG: stop_all_alarms, alert_active={getattr(self, 'alert_active', False)}, acknowledging_in_progress={getattr(self, 'acknowledging_in_progress', False)}")
         if not getattr(self, 'alert_active', False) and not getattr(self, 'acknowledging_in_progress', False):
-            print("DEBUG: Calling restore_alarm_display because no alerts active and not acknowledging")
             self.restore_alarm_display()
-        else:
-            if getattr(self, 'alert_active', False):
-                print("DEBUG: NOT restoring window - alerts still active")
-            if getattr(self, 'acknowledging_in_progress', False):
-                print("DEBUG: NOT restoring window - acknowledgment in progress")
             
         # Ensure normal background
         self.apply_background_style()
@@ -914,9 +907,7 @@ class AlertDisplay(QWidget):
     
     def restore_alarm_display(self):
         """Restore window to previous state when alarm ends"""
-        print(f"DEBUG: restore_alarm_display called, alert_active={getattr(self, 'alert_active', False)}")
         if hasattr(self, 'alarm_previous_state'):
-            print(f"DEBUG: Restoring from state: {self.alarm_previous_state}")
             try:
                 if self.alarm_previous_state == 'fullscreen':
                     # Was already fullscreen, stay fullscreen
