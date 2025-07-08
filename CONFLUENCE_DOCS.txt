@@ -1,194 +1,116 @@
-===============================================================
-              MANIFEST ALERT SYSTEM - CONFLUENCE DOCUMENTATION
-===============================================================
+Desktop application for shipping manifest alerts with modern dark theme UI.
 
-OVERVIEW
---------
-Professional warehouse alert system for shipping manifests with voice announcements 
-and real-time synchronization. Built with PyQt6 framework for modern Windows integration.
+🚀 Quick Installation
+For End Users (Warehouse Staff)
+Simple 3-Command Installation:
 
-QUICK DEPLOYMENT GUIDE
-=====================
 
-STEP 1: PREREQUISITES
-- Install Python 3.9+ from python.org (check "Add Python to PATH")
-- Install Git from git-scm.com
 
-STEP 2: INSTALLATION 
-- Download INSTALL.bat from GitHub: https://github.com/ropevp/manifest_alert
-- Create target folder (e.g., C:\ManifestAlerts)
-- Run INSTALL.bat in that folder
-- Installer automatically creates desktop + Start Menu shortcuts
+git clone https://github.com/ropevp/manifest_alert.git C:\ManifestAlerts
+cd C:\ManifestAlerts
+INSTALL.bat
+What this does:
 
-STEP 3: LAUNCH
-- Use desktop shortcut "Manifest Alert System"
-- Or Start Menu → "Manifest Alert System" 
-- Or Windows key + type "Manifest Alert"
+Downloads the complete system to C:\ManifestAlerts
 
-TECHNICAL ARCHITECTURE
-======================
+Sets up virtual environment and dependencies
 
-FRAMEWORK STACK:
-- GUI Framework: PyQt6 v6.8.1 (Qt6 modern framework)
-- Audio System: Qt6 Multimedia with hardware acceleration
-- Windows Integration: pywin32 v310 for native features
-- File Management: winshell v0.6 for shortcut creation
-- Text-to-Speech: pyttsx3 v2.90 with system voice engines
+Creates desktop and Start Menu shortcuts
 
-SYSTEM REQUIREMENTS:
-- OS: Windows 10/11 (64-bit recommended)
-- Python: 3.9+ (3.13 recommended)
-- Memory: 50MB RAM (lightweight background operation)
-- Storage: 150MB full installation with virtual environment
-- Network: Optional (for multi-PC sync via shared folders)
+Ready to use!
 
-KEY FEATURES
-============
+For IT Deployment
+Prerequisites:
 
-CORE FUNCTIONALITY:
-✓ Real-time manifest monitoring with visual + audio alerts
-✓ Multi-PC synchronization via shared folders (Google Drive, network shares)
-✓ Professional voice announcements with text-to-speech integration
-✓ User accountability tracking with custom names and timestamps
-✓ Smart snooze functionality with true window management
-✓ System tray integration for background operation
+Windows 10+ with Command Prompt
 
-UI/UX ENHANCEMENTS:
-✓ Enhanced display with 44% larger fonts for warehouse visibility
-✓ Multi-monitor support with direct monitor selection
-✓ Complete system tray menu for all functions
-✓ Windows taskbar integration with professional appearance
-✓ Automatic desktop and Start Menu shortcut creation
+Python 3.9+ installed and in PATH
 
-ALERT SYSTEM:
-✓ 🟢 Open Manifests: Scheduled but not yet active (green background)
-✓ 🔴 Active Manifests: Current time matches schedule (red, audio alerts)
-✓ 🟠 Missed Manifests: Past due and unacknowledged (orange, urgent alerts)
+Git for Windows (for automatic updates)
 
-INSTALLATION SYSTEM
-===================
+Internet connection for initial setup
 
-FRESH INSTALLATION PROCESS:
-[1/4] Prerequisites check (Python + Git validation)
-[2/4] Download from GitHub repository
-[3/4] Virtual environment + dependency installation  
-[4/4] Desktop shortcut creation (NEW!)
+Installation:
 
-UPDATE PROCESS:
-[1/4] Settings backup (preserves user configuration)
-[2/4] Download latest version from GitHub
-[3/4] Update dependencies to compatible versions
-[4/4] Refresh desktop shortcuts (NEW!)
+Use INSTALL.bat - handles setup automatically
 
-AUTO-CREATED SHORTCUTS:
-- Desktop: "Manifest Alert System.lnk" 
-- Start Menu: "Manifest Alert System.lnk"
-- Target: launch_manifest_alerts_silent.bat (no console window)
-- Icon: resources/icon.ico (professional branding)
+Creates virtual environment for dependency isolation
 
-CONFIGURATION MANAGEMENT
-========================
+Installs Windows shortcuts (Desktop + Start Menu)
 
-DATA STORAGE OPTIONS:
-1. Local Storage: app_data/config.json (single PC)
-2. Network Share: \\server\share\manifest_data\config.json (multi-PC)
-3. Cloud Sync: G:\My Drive\manifest_data\config.json (Google Drive)
+Future updates: run INSTALL.bat again in same directory
 
-SETTINGS MANAGEMENT:
-- Graphical settings dialog accessible from system tray
-- User name configuration for accountability tracking
-- Data source path configuration (local/network/cloud)
-- Audio settings and voice control options
-- Monitor selection and display preferences
+🔄 Updates
+To update an existing installation:
 
-SYNCHRONIZATION:
-- Real-time acknowledgment sync across multiple PCs
-- 0.5 second update intervals for immediate coordination
-- Conflict resolution with timestamp-based priority
-- Automatic backup and restore during updates
 
-DEPLOYMENT CONSIDERATIONS
-========================
 
-WAREHOUSE DEPLOYMENT:
-- Silent operation mode (no console windows)
-- System tray background operation
-- Professional Windows integration
-- Automatic startup capability via Windows startup folder
-- Zero-maintenance operation after initial setup
+cd C:\ManifestAlerts
+INSTALL.bat
+The installer detects existing installations and updates automatically.
 
-MULTI-PC COORDINATION:
-- Shared folder configuration for team coordination
-- User-specific acknowledgment tracking
-- Real-time synchronization prevents duplicate work
-- Centralized configuration management
+🎯 Features
+Modern UI: Dark theme interface with card-based layout
 
-TROUBLESHOOTING TOOLS:
-- launch_diagnostic.bat for detailed status checking
-- Comprehensive error messages with clear solutions
-- Automatic dependency verification and repair
-- Settings backup/restore functionality
+Multi-PC Sync: Shared data folders for acknowledgment synchronization
 
-VERSION HISTORY
-===============
+Large Display: Readable fonts and high contrast for warehouse displays
 
-v2.0 (July 2025) - PyQt6 Migration:
-- Upgraded from PyQt5 to PyQt6 for modern compatibility
-- Enhanced audio system with Qt6 Multimedia
-- Improved Windows integration and console suppression
-- Automatic shortcut creation and management
-- Updated dependencies: PyQt6 6.8.1, pywin32 310
+Windows Integration: Desktop shortcuts and taskbar integration
 
-v1.x - Previous Versions:
-- PyQt5-based implementation
-- Manual shortcut creation
-- Basic audio functionality
+Alert System:
+🔵 Open Manifests: Scheduled but not yet active (blue background)
+🔴 Active Manifests: Current time matches schedule (red background, audio alerts)
+🟢 Acknowledged/Done: Completed manifests (green background)
+🟠 Missed Manifests: Past due and unacknowledged (orange background, urgent alerts)
 
-SUPPORT AND MAINTENANCE
-=======================
+📂 File Structure
+After installation:
 
-UPDATE PROCESS:
-- Run same INSTALL.bat file for automatic updates
-- Settings are automatically preserved during updates
-- Shortcuts are refreshed to ensure functionality
-- No manual intervention required
+launch_manifest_alerts.bat - Start with console window
 
-ERROR RESOLUTION:
-- All error messages include specific solution steps
-- launch_diagnostic.bat provides detailed system status
-- Automatic dependency verification and repair
-- Clear troubleshooting instructions in all error dialogs
+launch_manifest_alerts_silent.bat - Start without console
 
-GITHUB REPOSITORY:
-- Source code: https://github.com/ropevp/manifest_alert
-- Issue tracking and feature requests
-- Release notes and version history
-- Installation files and documentation
+USER_INSTRUCTIONS.md - Configuration guide
 
-PRODUCTION READINESS
-===================
+.venv\ - Isolated Python environment
 
-DEPLOYMENT CHECKLIST:
-✓ Professional UI with Windows integration
-✓ Silent background operation (no console windows)
-✓ Automatic shortcut creation for user accessibility
-✓ System tray integration for minimal intrusion
-✓ Comprehensive error handling with user-friendly messages
-✓ Zero-maintenance operation after installation
-✓ Multi-PC synchronization for warehouse coordination
-✓ Professional voice announcements for alert clarity
+app_data\ - Application settings
 
-RELIABILITY FEATURES:
-✓ Virtual environment isolation prevents system conflicts
-✓ Automatic dependency management with compatible versions
-✓ Settings backup and restore during updates
-✓ Comprehensive error recovery mechanisms
-✓ Modern Qt6 framework for long-term compatibility
+data\ or custom path - Manifest data and acknowledgments
 
-Ready for immediate warehouse deployment with professional reliability.
+⚙️ Configuration
+See USER_INSTRUCTIONS.md for:
 
-===============================================================
-Last Updated: July 8, 2025
-Version: 2.0 (PyQt6 Migration)
-GitHub: https://github.com/ropevp/manifest_alert
-===============================================================
+Data folder configuration
+
+Multi-PC synchronization setup
+
+Manifest timing configuration
+
+🛠️ Development
+Requirements:
+
+Python 3.9+
+
+PyQt6 6.8.1+
+
+Git
+
+Setup:
+
+
+
+git clone https://github.com/ropevp/manifest_alert.git
+cd manifest_alert
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python main.py
+📋 Architecture
+PyQt6: Qt6 framework with card-based UI
+
+JSON Storage: File-based configuration and acknowledgments
+
+Git Updates: Version management via GitHub
+
+Virtual Environment: Isolated dependencies
