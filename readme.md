@@ -1,94 +1,90 @@
-# Manifest Alert System V2
+# 🚨 Manifest Alert System
 
-**Desktop application for shipping manifest alerts with modern dark theme UI.**
+Professional warehouse alert system for shipping manifests with voice announcements and real-time synchronization.
 
-## 🚀 Quick Installation
+## 🚀 Installation (New Users)
 
-### For End Users (Warehouse Staff)
+### Prerequisites
+1. **Install Python**: Download from [python.org](https://python.org) 
+   - ⚠️ **IMPORTANT**: Check "Add Python to PATH" during installation
+2. **Install Git**: Download from [git-scm.com](https://git-scm.com/download/win)
 
-**Simple 3-Command Installation:**
-```cmd
-git clone https://github.com/ropevp/manifest_alert.git C:\ManifestAlerts
-cd C:\ManifestAlerts
-INSTALL.bat
+### One-Click Installation
+1. **Create folder**: Make a new folder where you want the application (e.g., `C:\ManifestAlerts`)
+2. **Download installer**: Save `INSTALL.bat` to that folder
+3. **Run installer**: Double-click `INSTALL.bat` and follow prompts
+4. **Launch app**: Use desktop shortcut or Start Menu
+
+## 🔄 Updates (Existing Users)
+
+**To update to the latest version:**
+1. **Run same file**: Double-click `INSTALL.bat` in your application folder
+2. **Automatic update**: The installer detects existing installation and updates it
+3. **Settings preserved**: Your configuration and data are automatically backed up and restored
+
+## 🎯 Daily Usage
+
+**Launch the application:**
+- Double-click desktop shortcut "Manifest Alert System"
+- Or press Windows key and type "Manifest Alert"
+
+**For troubleshooting:**
+- Use `launch_diagnostic.bat` to see detailed status
+- All issues and solutions are shown clearly
+
+## 📁 What Gets Installed
+
+```
+YourFolder/
+├── INSTALL.bat                      # One installer for everything
+├── main.py                          # Application files
+├── alert_display.py                 # (and other Python files)
+├── .venv/                          # Virtual environment (automatic)
+├── data/                           # Your settings
+├── logs/                           # Acknowledgment history  
+├── resources/                      # Icons and sounds
+└── Desktop Shortcut Created        # Easy access
 ```
 
-**What this does:**
-1. Downloads the complete system to `C:\ManifestAlerts`
-2. Sets up virtual environment and dependencies
-3. Creates desktop and Start Menu shortcuts
-4. Ready to use!
+## ✅ Features
 
-### For IT Deployment
+- **🔥 Ultra-Fast Sync**: 0.5s acknowledgment updates across PCs
+- **🎙️ Voice Announcements**: Professional text-to-speech alerts with snooze integration
+- **👤 User Tracking**: Custom names and accountability logging
+- **🖥️ Multi-PC Support**: Share data via Google Drive or network folders
+- **🖱️ System Tray Control**: Complete application control from taskbar menu
+- **📺 Enhanced Display**: Larger fonts optimized for warehouse TV displays
+- **🔄 Smart Snooze**: Professional window management during break periods
+- **🖥️ Multi-Monitor**: Direct monitor selection with intelligent switching
+- **⚡ Professional UI**: Windows integration with taskbar and system tray
+- **🔄 Auto-Updates**: Simple update process preserves all settings
 
-**Prerequisites:**
-- Windows 7+ with Command Prompt
-- Python 3.8+ installed and in PATH
-- Git for Windows (for automatic updates)
-- Internet connection for initial setup
+## 🆕 Latest Enhancements (July 2025)
 
-**Installation:**
-- Use `INSTALL.bat` - handles setup automatically
-- Creates virtual environment for dependency isolation
-- Installs Windows shortcuts (Desktop + Start Menu)
-- Future updates: run `INSTALL.bat` again in same directory
+- **📏 Enhanced Message Display**: 44% larger fonts for better warehouse visibility
+- **🖱️ Complete System Tray Menu**: Access all functions from taskbar
+- **🖥️ Smart Monitor Switching**: Direct monitor selection with current monitor indicator
+- **😴 Professional Snooze**: True window management relief during breaks
+- **🔇 Complete Audio Control**: Unified snooze handling for all audio systems
 
-## 🔄 Updates
+## 🆘 Troubleshooting
 
-To update an existing installation:
-```cmd
-cd C:\ManifestAlerts
-INSTALL.bat
-```
-The installer detects existing installations and updates automatically.
+**"Python is not recognized"**
+- Reinstall Python from python.org
+- Check "Add Python to PATH" during installation
 
-## 🎯 Features
+**"Git is not recognized"**  
+- Install Git from git-scm.com
+- Restart Command Prompt after installation
 
-- **Modern UI**: Dark theme interface with card-based layout
-- **Multi-PC Sync**: Shared data folders for acknowledgment synchronization
-- **Large Display**: Readable fonts and high contrast for warehouse displays
-- **Windows Integration**: Desktop shortcuts and taskbar integration
+**Application won't start**
+- Run `launch_diagnostic.bat` for detailed status
+- Follow the on-screen suggestions
 
-## 📂 File Structure
-
-After installation:
-- `launch_manifest_alerts.bat` - Start with console window
-- `launch_manifest_alerts_silent.bat` - Start without console
-- `USER_INSTRUCTIONS.md` - Configuration guide
-- `.venv\` - Isolated Python environment
-- `app_data\` - Application settings
-- `data\` or custom path - Manifest data and acknowledgments
-
-## ⚙️ Configuration
-
-See `USER_INSTRUCTIONS.md` for:
-- Data folder configuration
-- Multi-PC synchronization setup
-- Manifest timing configuration
-
-## 🛠️ Development
-
-**Requirements:**
-- Python 3.8+
-- PyQt6 6.8.0+
-- Git
-
-**Setup:**
-```cmd
-git clone https://github.com/e10120323/manifest_alerts.git
-cd manifest_alerts
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python main.py
-```
-
-## 📋 Architecture
-
-- **PyQt6**: Qt6 framework with card-based UI
-- **JSON Storage**: File-based configuration and acknowledgments
-- **Git Updates**: Version management via GitHub
-- **Virtual Environment**: Isolated dependencies
+**Need help?**
+- All error messages include clear solutions
+- Run `INSTALL.bat` again to fix most issues
 
 ---
 
-**Support**: See `USER_INSTRUCTIONS.md` for configuration help
+**🏭 Ready for warehouse deployment with professional reliability and zero-maintenance operation.**

@@ -1,129 +1,136 @@
 @echo off
-setlocal enabledelayedexpansion
+REM =================================================================
+REM Manifest Alert System - ONE-CLICK INSTALLER & UPDATER
+REM Use this file for both fresh installation and updates
+REM Run this file in the folder where you want to install the application 
+REM Running C:\INSTALL.bat C: will create the folder C:\manifest_alerts
+REM =================================================================
 
 echo.
-echo ================================================
-echo  Manifest Alert System V2 - One-Click Installer
-echo ================================================
+echo ===============================================================
+echo           MANIFEST ALERT SYSTEM - INSTALLER/UPDATER
+echo ===============================================================
 echo.
 
-REM Get current directory
-set "CURRENT_DIR=%cd%"
-
-REM Check if we're in a git repository
+REM Check if this is an update (git folder exists) or fresh install
 if exist ".git" (
-    echo Existing installation detected - updating...
-    echo.
-    
-    echo Fetching latest changes from GitHub...
-    git fetch origin main
-    if errorlevel 1 (
-        echo ERROR: Failed to fetch from repository
-        pause
-        exit /b 1
-    )
-    
-    echo Resetting to latest version...
-    git reset --hard origin/main
-    if errorlevel 1 (
-        echo ERROR: Failed to reset to latest version
-        pause
-        exit /b 1
-    )
-    
-    echo.
-    echo Update completed successfully!
-    echo.
+    echo DETECTED: Existing installation - UPDATING...
+    goto :update
 ) else (
-    echo Fresh installation - cloning repository...
-    echo.
-    
-    REM Check if we have any files (except this installer)
-    set "FILE_COUNT=0"
-    for %%f in (*) do (
-        if not "%%f"=="INSTALL.bat" (
-            set /a FILE_COUNT+=1
-        )
-    )
-    
-    if !FILE_COUNT! gtr 0 (
-        echo ERROR: This directory is not empty. Please run INSTALL.bat in an empty directory.
-        echo Current directory: %CURRENT_DIR%
-        pause
-        exit /b 1
-    )
-    
-    echo Cloning from GitHub...
-    git clone https://github.com/e10120323/manifest_alerts.git .
-    if errorlevel 1 (
-        echo ERROR: Failed to clone repository
-        echo Please check your internet connection and try again.
-        pause
-        exit /b 1
-    )
-    
-    echo.
-    echo Repository cloned successfully!
-    echo.
+    echo DETECTED: Fresh installation - INSTALLING...
+    goto :install
 )
 
-REM Check if Python is available
+:install
+echo.
+echo [1/4] Checking prerequisites...
+
+REM Check if Git is installed
+git --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: Git is not installed
+    echo Please install Git from: https://git-scm.com/download/win
+    echo After installing Git, run this script again
+    pause
+    exit /b 1
+)
+
+REM Check if Python is installed
 python --version >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Python is not installed or not in PATH
-    echo Please install Python 3.8 or later from https://python.org
+if %errorlevel% neq 0 (
+    echo ERROR: Python is not installed
+    echo Please install Python from: https://python.org
+    echo Make sure to check "Add Python to PATH" during installation
     pause
     exit /b 1
 )
 
-echo Setting up virtual environment...
-if not exist ".venv" (
+echo ✅ Git and Python are available
+
+echo.
+echo [2/4] Downloading Manifest Alert System...
+git clone https://github.com/ropevp/manifest_alert.git .
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to download from GitHub
+    echo Check your internet connection and try again
+    pause
+    exit /b 1
+)
+
+echo.
+echo [3/4] Setting up virtual environment and dependencies...
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install dependencies
+    pause
+    exit /b 1
+)
+
+echo.
+echo [4/4] Creating desktop shortcut...
+.venv\Scripts\python.exe install_shortcuts.py
+
+echo.
+echo ===============================================================
+echo ✅ INSTALLATION COMPLETE!
+echo ===============================================================
+echo.
+echo To launch Manifest Alert System:
+echo   • Double-click desktop shortcut
+echo   • Or press Windows key and type "Manifest Alert"
+echo.
+echo To update in the future: Run this same file again
+echo.
+goto :end
+
+:update
+echo.
+echo [1/3] Backing up your settings...
+if exist "data\config.json" (
+    copy "data\config.json" "data\config.json.backup" >nul
+    echo ✅ Settings backed up
+) else (
+    echo ℹ️  No existing settings found
+)
+
+echo.
+echo [2/3] Downloading latest version...
+git fetch origin
+git reset --hard origin/main
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to download updates
+    echo Check your internet connection and try again
+    pause
+    exit /b 1
+)
+
+echo.
+echo [3/3] Updating dependencies...
+if exist ".venv\Scripts\python.exe" (
+    .venv\Scripts\pip install -r requirements.txt
+) else (
+    echo Creating virtual environment...
     python -m venv .venv
-    if errorlevel 1 (
-        echo ERROR: Failed to create virtual environment
-        pause
-        exit /b 1
+    .venv\Scripts\pip install -r requirements.txt
+)
+
+if exist "data\config.json.backup" (
+    if not exist "data\config.json" (
+        copy "data\config.json.backup" "data\config.json" >nul
+        echo ✅ Settings restored
     )
-    echo Virtual environment created.
-) else (
-    echo Virtual environment already exists.
 )
 
 echo.
-echo Installing/updating dependencies...
-.venv\Scripts\python.exe -m pip install --upgrade pip
-if errorlevel 1 (
-    echo ERROR: Failed to upgrade pip
-    pause
-    exit /b 1
-)
+echo ===============================================================
+echo ✅ UPDATE COMPLETE!
+echo ===============================================================
+echo.
+echo Manifest Alert System has been updated to the latest version
+echo Launch using your desktop shortcut or Start Menu
+echo.
 
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-if errorlevel 1 (
-    echo ERROR: Failed to install requirements
-    pause
-    exit /b 1
-)
-
-echo.
-echo Installing shortcuts...
-.venv\Scripts\python.exe install_shortcuts.py --silent
-if errorlevel 1 (
-    echo WARNING: Shortcut installation failed (continuing...)
-) else (
-    echo Desktop and Start Menu shortcuts created.
-)
-
-echo.
-echo ================================================
-echo Installation completed successfully!
-echo ================================================
-echo.
-echo Next steps:
-echo 1. Double-click the 'Manifest Alert System' desktop shortcut
-echo 2. Or run: launch_manifest_alerts.bat
-echo 3. Or launch silently: launch_manifest_alerts_silent.bat
-echo.
-echo For configuration, see: USER_INSTRUCTIONS.md
-echo.
-pause
+:end
+echo Press any key to exit...
+pause >nul

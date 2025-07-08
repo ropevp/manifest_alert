@@ -50,7 +50,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Checking Python modules...
-"%PYTHON_CMD%" -c "import PyQt6; print('✅ PyQt6 available')" 2>nul || echo ❌ PyQt6 not available - run: %PYTHON_CMD% -m pip install -r requirements.txt
+"%PYTHON_CMD%" -c "import PyQt5; print('✅ PyQt5 available')" 2>nul || echo ❌ PyQt5 not available - run: %PYTHON_CMD% -m pip install -r requirements.txt
 
 echo.
 echo Attempting to launch application...

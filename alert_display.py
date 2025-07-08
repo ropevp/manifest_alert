@@ -801,9 +801,6 @@ class AlertDisplay(QWidget):
     def update_refresh_timer(self):
         """Update refresh timer interval based on alert state"""
         if self.refresh_timer:
-            # Stop current timer first to ensure immediate restart with new interval
-            self.refresh_timer.stop()
-            
             if self.alert_active:
                 # Alert mode: 1 second for real-time updates
                 self.refresh_timer.start(1000)
@@ -1218,21 +1215,11 @@ class AlertDisplay(QWidget):
         # Update alert state
         self.alert_active = (active_count > 0 or missed_count > 0)
         
-        # Update refresh timer interval IMMEDIATELY based on new alert state
+        # Update refresh timer interval based on alert state
         self.update_refresh_timer()
         
         # Update flash timer based on alert state
         self.update_flash_timer()
-        
-        # If we just cleared all alerts, force an immediate refresh cycle to ensure
-        # we don't wait up to 10 seconds for the next update
-        if not self.alert_active and hasattr(self, '_previous_alert_state') and self._previous_alert_state:
-            # We just went from alert to no-alert, schedule immediate refresh in 1 second
-            # to catch any last-second acknowledgments, then switch to normal 10s interval
-            QTimer.singleShot(1000, self.populate_data)
-        
-        # Track previous alert state for next cycle
-        self._previous_alert_state = self.alert_active
         
         # Update summary with next manifest countdown
         next_manifest_info = self.get_next_manifest_info(manifests, now)
@@ -1892,10 +1879,6 @@ class AlertDisplay(QWidget):
             # Refresh display immediately to show changes
             self.populate_data()
             
-            # Force immediate timer restart to ensure rapid updates after acknowledgment
-            if hasattr(self, 'refresh_timer') and self.refresh_timer:
-                self.update_refresh_timer()
-            
             # Clear acknowledgment flag after data refresh
             self.acknowledging_in_progress = False
             
@@ -1974,10 +1957,6 @@ class AlertDisplay(QWidget):
                 
                 # Refresh display immediately to show changes
                 self.populate_data()
-                
-                # Force immediate timer restart to ensure rapid updates after acknowledgment
-                if hasattr(self, 'refresh_timer') and self.refresh_timer:
-                    self.update_refresh_timer()
                 
                 # Clear acknowledgment flag after data refresh
                 self.acknowledging_in_progress = False

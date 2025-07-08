@@ -1,10 +1,9 @@
 import os
 import json
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QPushButton, QLineEdit, QFileDialog, QMessageBox,
-                            QComboBox, QGroupBox)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                            QPushButton, QLineEdit, QFileDialog, QMessageBox)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 
 
 class SettingsManager:
@@ -13,14 +12,9 @@ class SettingsManager:
         # but user can configure where config.json and acknowledgments.json are stored
         app_data_folder = os.path.join(os.path.dirname(__file__), 'app_data')
         self.settings_file = os.path.join(app_data_folder, 'settings.json')
-        
-        # Also read from main settings.json for monitor settings
-        self.main_settings_file = os.path.join(os.path.dirname(__file__), 'settings.json')
-        
         self.default_settings = {
             'app_data_folder': app_data_folder,
-            'ack_name': '',  # Custom acknowledgment name, empty means use Windows username
-            'alarm_monitor': 0  # Monitor index for startup positioning
+            'ack_name': ''  # Custom acknowledgment name, empty means use Windows username
         }
         # Ensure app_data folder exists
         os.makedirs(app_data_folder, exist_ok=True)
@@ -28,37 +22,27 @@ class SettingsManager:
 
     def load_settings(self):
         """Load settings from JSON file or create with defaults"""
-        settings = self.default_settings.copy()
-        
-        # First load from app_data settings file
         if os.path.exists(self.settings_file):
             try:
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
-                    if content:  # Handle empty file
-                        app_settings = json.loads(content)
-                        settings.update(app_settings)
+                    if not content:  # Handle empty file
+                        return self.default_settings.copy()
+                    settings = json.loads(content)
+                # Ensure all required keys exist
+                for key, value in self.default_settings.items():
+                    if key not in settings:
+                        settings[key] = value
+                return settings
             except Exception as e:
-                print(f"Error loading app settings: {e}")
-        
-        # Then load monitor setting from main settings.json
-        if os.path.exists(self.main_settings_file):
-            try:
-                with open(self.main_settings_file, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                    if content:
-                        main_settings = json.loads(content)
-                        if 'alarm_monitor' in main_settings:
-                            settings['alarm_monitor'] = main_settings['alarm_monitor']
-            except Exception as e:
-                print(f"Error loading main settings: {e}")
-        
-        # Ensure all required keys exist
-        for key, value in self.default_settings.items():
-            if key not in settings:
-                settings[key] = value
-                
-        return settings
+                print(f"Error loading settings: {e}")
+                # Recreate with defaults if corrupted
+                self.save_settings(self.default_settings)
+                return self.default_settings.copy()
+        else:
+            # Create settings file with defaults
+            self.save_settings(self.default_settings)
+            return self.default_settings.copy()
     
     def save_settings(self, settings=None):
         """Save settings to JSON file"""
@@ -112,43 +96,6 @@ class SettingsManager:
         import getpass
         custom_name = self.get_ack_name()
         return custom_name if custom_name else getpass.getuser()
-    
-    def get_alarm_monitor(self):
-        """Get the alarm monitor index"""
-        return self.settings.get('alarm_monitor', 0)
-    
-    def set_alarm_monitor(self, monitor_index):
-        """Set the alarm monitor index"""
-        self.settings['alarm_monitor'] = monitor_index
-        
-        # Save to both app settings and main settings
-        app_saved = self.save_settings()
-        main_saved = self.save_to_main_settings('alarm_monitor', monitor_index)
-        
-        return app_saved and main_saved
-    
-    def save_to_main_settings(self, key, value):
-        """Save a specific setting to the main settings.json file"""
-        try:
-            # Load existing main settings
-            main_settings = {}
-            if os.path.exists(self.main_settings_file):
-                with open(self.main_settings_file, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                    if content:
-                        main_settings = json.loads(content)
-            
-            # Update the specific key
-            main_settings[key] = value
-            
-            # Save back to main settings file
-            with open(self.main_settings_file, 'w', encoding='utf-8') as f:
-                json.dump(main_settings, f, indent=2, ensure_ascii=False)
-                
-            return True
-        except Exception as e:
-            print(f"Error saving to main settings: {e}")
-            return False
 
 # Global settings manager instance
 _settings_manager = None
@@ -215,25 +162,6 @@ class SettingsDialog(QDialog):
         
         layout.addSpacing(15)
         
-        # Monitor selection setting
-        monitor_group = QVBoxLayout()
-        monitor_label = QLabel("🖥️ Startup Monitor:")
-        monitor_label.setFont(QFont('Segoe UI', 11, QFont.Bold))
-        monitor_group.addWidget(monitor_label)
-        
-        monitor_info = QLabel("Select which monitor the alarm window should start on")
-        monitor_info.setFont(QFont('Segoe UI', 9))
-        monitor_info.setStyleSheet("color: #666; margin-left: 10px;")
-        monitor_group.addWidget(monitor_info)
-        
-        self.monitor_combo = QComboBox()
-        self.populate_monitor_list()
-        monitor_group.addWidget(self.monitor_combo)
-        
-        layout.addLayout(monitor_group)
-        
-        layout.addSpacing(15)
-        
         # App data folder setting
         app_data_group = QVBoxLayout()
         app_data_label = QLabel("📁 Data Storage Location:")
@@ -287,46 +215,10 @@ class SettingsDialog(QDialog):
         layout.addLayout(button_layout)
         self.setLayout(layout)
     
-    def populate_monitor_list(self):
-        """Populate the monitor combo box with available monitors"""
-        from PyQt6.QtGui import QGuiApplication
-        
-        self.monitor_combo.clear()
-        screens = QGuiApplication.screens()
-        
-        for i, screen in enumerate(screens):
-            geometry = screen.geometry()
-            # Get screen name/model if available
-            screen_name = screen.name() if hasattr(screen, 'name') else f"Monitor {i + 1}"
-            resolution = f"{geometry.width()}x{geometry.height()}"
-            
-            # Create descriptive text
-            if i == 0:
-                display_text = f"Monitor {i + 1} (Primary) - {screen_name} ({resolution})"
-            else:
-                display_text = f"Monitor {i + 1} - {screen_name} ({resolution})"
-                
-            self.monitor_combo.addItem(display_text, i)
-        
-        if len(screens) == 1:
-            self.monitor_combo.addItem("Only one monitor detected", 0)
-            self.monitor_combo.setEnabled(False)
-        else:
-            self.monitor_combo.setEnabled(True)
-    
     def load_current_settings(self):
         """Load current settings into the UI"""
         self.ack_name_edit.setText(self.settings_manager.get_ack_name())
         self.app_data_path_edit.setText(self.settings_manager.get_app_data_folder())
-        
-        # Set monitor selection
-        current_monitor = self.settings_manager.get_alarm_monitor()
-        # Find the combo box item with matching monitor index
-        for i in range(self.monitor_combo.count()):
-            if self.monitor_combo.itemData(i) == current_monitor:
-                self.monitor_combo.setCurrentIndex(i)
-                break
-        
         # Trigger initial path validation
         self.validate_path_realtime()
     
@@ -397,14 +289,6 @@ class SettingsDialog(QDialog):
         """Reset path to default values"""
         self.ack_name_edit.setText(self.settings_manager.default_settings['ack_name'])
         self.app_data_path_edit.setText(self.settings_manager.default_settings['app_data_folder'])
-        
-        # Reset monitor to default (0 - primary monitor)
-        default_monitor = self.settings_manager.default_settings['alarm_monitor']
-        for i in range(self.monitor_combo.count()):
-            if self.monitor_combo.itemData(i) == default_monitor:
-                self.monitor_combo.setCurrentIndex(i)
-                break
-        
         # Trigger path validation after reset
         self.validate_path_realtime()
     
@@ -460,11 +344,6 @@ class SettingsDialog(QDialog):
         ack_name = self.ack_name_edit.text().strip()
         app_data_path = self.app_data_path_edit.text().strip()
         
-        # Get selected monitor index
-        selected_monitor = self.monitor_combo.currentData()
-        if selected_monitor is None:
-            selected_monitor = 0  # Default to primary monitor
-        
         # Save settings
         if not self.settings_manager.set_ack_name(ack_name):
             QMessageBox.critical(self, "Error", "Failed to save acknowledgment name setting")
@@ -474,21 +353,15 @@ class SettingsDialog(QDialog):
             QMessageBox.critical(self, "Error", "Failed to save application data folder setting")
             return
         
-        if not self.settings_manager.set_alarm_monitor(selected_monitor):
-            QMessageBox.critical(self, "Error", "Failed to save monitor setting")
-            return
-        
         # Show success message
         effective_name = self.settings_manager.get_effective_ack_name()
-        monitor_text = self.monitor_combo.currentText()
         QMessageBox.information(
             self, 
             "Settings Saved", 
             f"Settings have been updated successfully!\n\n"
             f"Acknowledgment name: {effective_name}\n"
-            f"Data storage location: {app_data_path}\n"
-            f"Startup monitor: {monitor_text}\n\n"
-            "Monitor changes will take effect on next application restart."
+            f"Data storage location: {app_data_path}\n\n"
+            "These changes will take effect immediately."
         )
         
         self.accept()
