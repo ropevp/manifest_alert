@@ -30,7 +30,7 @@ def load_config(config_path=None):
             shutil.copyfile(config_path, backup_path)
         except Exception:
             pass
-        from PyQt5.QtWidgets import QMessageBox
+        from PyQt6.QtWidgets import QMessageBox
         QMessageBox.critical(None, "Config Error", f"Config file is invalid and was backed up as {config_path}.bak: {e}")
         return {"manifests": []}
 

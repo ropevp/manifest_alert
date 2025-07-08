@@ -1,11 +1,21 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt
-from alert_display import AlertDisplay
 import os
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtCore import Qt
+from alert_display import AlertDisplay
 
 if __name__ == "__main__":
+    # Hide console window in production (when run with pythonw.exe)
+    try:
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+    except:
+        pass  # Ignore if not on Windows or if console is already hidden
+    
+    # Suppress Qt debug output for cleaner production experience
+    os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg.debug=false'
+    
     app = QApplication(sys.argv)
     
     # Set application properties for better Windows integration
@@ -28,7 +38,7 @@ if __name__ == "__main__":
     
     app.setQuitOnLastWindowClosed(False)
     window = AlertDisplay()
-    window.setWindowState(window.windowState() | Qt.WindowMaximized)
+    window.setWindowState(window.windowState() | Qt.WindowState.WindowMaximized)
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

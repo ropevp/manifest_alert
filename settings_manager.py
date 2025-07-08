@@ -1,9 +1,9 @@
 import os
 import json
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                             QPushButton, QLineEdit, QFileDialog, QMessageBox)
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 
 
 class SettingsManager:
@@ -115,11 +115,11 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Application Settings")
         self.setModal(True)
         self.resize(600, 400)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         
         # Ensure dialog stays on top and maintains focus
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_ShowWithoutActivating, False)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         
         self.setup_ui()
         self.load_current_settings()
@@ -129,15 +129,15 @@ class SettingsDialog(QDialog):
         
         # Title
         title = QLabel("Application Settings")
-        title.setFont(QFont('Segoe UI', 14, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont('Segoe UI', 14, QFont.Weight.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
         # Description
         desc = QLabel("Configure application settings including data storage and acknowledgment name.")
         desc.setFont(QFont('Segoe UI', 10))
         desc.setWordWrap(True)
-        desc.setAlignment(Qt.AlignCenter)
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(desc)
         
         layout.addSpacing(20)
@@ -145,7 +145,7 @@ class SettingsDialog(QDialog):
         # Acknowledgment name setting
         ack_name_group = QVBoxLayout()
         ack_name_label = QLabel("👤 Acknowledgment Name:")
-        ack_name_label.setFont(QFont('Segoe UI', 11, QFont.Bold))
+        ack_name_label.setFont(QFont('Segoe UI', 11, QFont.Weight.Bold))
         ack_name_group.addWidget(ack_name_label)
         
         ack_name_info = QLabel("Display name for acknowledgments (leave blank to use Windows username)")
@@ -165,7 +165,7 @@ class SettingsDialog(QDialog):
         # App data folder setting
         app_data_group = QVBoxLayout()
         app_data_label = QLabel("📁 Data Storage Location:")
-        app_data_label.setFont(QFont('Segoe UI', 11, QFont.Bold))
+        app_data_label.setFont(QFont('Segoe UI', 11, QFont.Weight.Bold))
         app_data_group.addWidget(app_data_label)
         
         folder_info = QLabel("Contains: config.json, acknowledgments.json (for multi-PC sync, use shared folder)")
@@ -231,16 +231,16 @@ class SettingsDialog(QDialog):
         # Create file dialog with proper focus handling
         dialog = QFileDialog(self)
         dialog.setWindowTitle("Select Application Data Folder")
-        dialog.setFileMode(QFileDialog.DirectoryOnly)
-        dialog.setOption(QFileDialog.ShowDirsOnly, True)
+        dialog.setFileMode(QFileDialog.FileMode.Directory)
+        dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
         dialog.setDirectory(current_path)
         
         # Ensure dialog stays on top and maintains focus
-        dialog.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.Dialog)
+        dialog.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog)
         dialog.activateWindow()
         dialog.raise_()
         
-        if dialog.exec_() == QFileDialog.Accepted:
+        if dialog.exec() == QFileDialog.DialogCode.Accepted:
             selected_folders = dialog.selectedFiles()
             if selected_folders:
                 folder = selected_folders[0]
@@ -309,9 +309,9 @@ class SettingsDialog(QDialog):
                 self, 
                 "Create Folder?", 
                 f"Application data folder does not exist:\n{expanded_path}\n\nCreate it now?",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 try:
                     os.makedirs(expanded_path, exist_ok=True)
                 except Exception as e:
