@@ -1,116 +1,182 @@
 Desktop application for shipping manifest alerts with modern dark theme UI.
 
-🚀 Quick Installation
-For End Users (Warehouse Staff)
-Simple 3-Command Installation:
+🚀 Installation Guide
 
+Simple Installation Steps:
+1. Create a new folder (e.g., C:\ManifestAlerts)
+2. Download INSTALL.bat from: https://github.com/ropevp/manifest_alert
+3. Put INSTALL.bat in your folder and double-click it
+4. Follow the prompts - everything is automatic!
 
+What Gets Installed:
+✓ Desktop shortcut "Manifest Alert System"
+✓ Start Menu entry for easy access
+✓ All required software components
+✓ Ready to use immediately
 
-git clone https://github.com/ropevp/manifest_alert.git C:\ManifestAlerts
-cd C:\ManifestAlerts
-INSTALL.bat
-What this does:
+Prerequisites (One-time setup):
+- Install Python from python.org (check "Add Python to PATH")
+- Install Git from git-scm.com
+- Windows 10+ recommended
 
-Downloads the complete system to C:\ManifestAlerts
-
-Sets up virtual environment and dependencies
-
-Creates desktop and Start Menu shortcuts
-
-Ready to use!
-
-For IT Deployment
-Prerequisites:
-
-Windows 10+ with Command Prompt
-
-Python 3.9+ installed and in PATH
-
-Git for Windows (for automatic updates)
-
-Internet connection for initial setup
-
-Installation:
-
-Use INSTALL.bat - handles setup automatically
-
-Creates virtual environment for dependency isolation
-
-Installs Windows shortcuts (Desktop + Start Menu)
-
-Future updates: run INSTALL.bat again in same directory
-
-🔄 Updates
+🔄 Updating
 To update an existing installation:
+1. Go to your installation folder (e.g., C:\ManifestAlerts)
+2. Double-click INSTALL.bat
+3. The installer automatically detects and updates your installation
+4. Your settings and data are preserved
 
+🎯 How to Use
 
+Starting the Application:
+- Double-click desktop shortcut "Manifest Alert System"
+- OR Start Menu → "Manifest Alert System"
+- OR Windows key + type "Manifest Alert"
 
-cd C:\ManifestAlerts
-INSTALL.bat
-The installer detects existing installations and updates automatically.
-
-🎯 Features
-Modern UI: Dark theme interface with card-based layout
-
-Multi-PC Sync: Shared data folders for acknowledgment synchronization
-
-Large Display: Readable fonts and high contrast for warehouse displays
-
-Windows Integration: Desktop shortcuts and taskbar integration
-
-Alert System:
+Understanding Alert Colors:
 🔵 Open Manifests: Scheduled but not yet active (blue background)
 🔴 Active Manifests: Current time matches schedule (red background, audio alerts)
 🟢 Acknowledged/Done: Completed manifests (green background)
 🟠 Missed Manifests: Past due and unacknowledged (orange background, urgent alerts)
 
-📂 File Structure
-After installation:
+Daily Operation:
+1. Launch the application (runs in background)
+2. Monitor alerts on screen
+3. Click manifests to acknowledge them
+4. System automatically syncs across all PCs
 
-launch_manifest_alerts.bat - Start with console window
+⚙️ Configuration Guide
 
-launch_manifest_alerts_silent.bat - Start without console
+The system uses JSON files for easy configuration. No technical knowledge required!
 
-USER_INSTRUCTIONS.md - Configuration guide
+Settings Location:
+- Click system tray icon → Settings
+- OR find: app_data/settings.json in your installation folder
 
-.venv\ - Isolated Python environment
+Key Configuration Files:
 
-app_data\ - Application settings
+1. settings.json - Application Settings
+{
+  "username": "YourName",
+  "data_folder": "data",
+  "alarm_monitor": 0,
+  "keep_fullscreen_tv": false
+}
 
-data\ or custom path - Manifest data and acknowledgments
+2. config.json - Manifest Configuration
+{
+  "manifests": [
+    {
+      "time": "11:00",
+      "carriers": [
+        "Australia Post Metro",
+        "EParcel Postplus"
+      ]
+    },
+    {
+      "time": "12:30",
+      "carriers": [
+        "EParcel Express"
+      ]
+    },
+    {
+      "time": "15:30",
+      "carriers": [
+        "Toll API",
+        "Toll Priority"
+      ]
+    }
+  ]
+}
 
-⚙️ Configuration
-See USER_INSTRUCTIONS.md for:
+Common Configuration Tasks:
 
-Data folder configuration
+Adding New Manifests:
+1. Open config.json in notepad
+2. Copy an existing manifest time block
+3. Change the time and add/remove carriers
+4. Save the file
+5. Restart the application
 
-Multi-PC synchronization setup
+Example - Adding a new 14:00 manifest:
+{
+  "time": "14:00",
+  "carriers": [
+    "New Carrier Name"
+  ]
+}
 
-Manifest timing configuration
+Changing User Name:
+1. Open app_data/settings.json in notepad
+2. Change "username": "YourName" to your actual name
+3. Save the file
+4. Restart the application
 
-🛠️ Development
-Requirements:
+Setting Up Multi-PC Sync:
+1. Choose a shared folder (Google Drive, network drive, etc.)
+2. Open app_data/settings.json
+3. Change "data_folder": "path/to/shared/folder" 
+4. All PCs should point to the same shared folder
+5. Acknowledgments sync automatically across all PCs
 
-Python 3.9+
+Monitor Selection:
+1. Open app_data/settings.json
+2. Change "alarm_monitor": 0 (first monitor), 1 (second monitor), etc.
+3. Save and restart application
 
-PyQt6 6.8.1+
+Fullscreen TV Mode:
+1. Open app_data/settings.json  
+2. Change "keep_fullscreen_tv": true (stays fullscreen) or false (normal window)
+3. Save and restart application
 
-Git
+Quick Configuration Tips:
+- Use Notepad to edit JSON files (don't use Word)
+- Always backup files before making changes
+- Restart application after changing config.json
+- Test with one PC before deploying to multiple PCs
 
-Setup:
+🛠️ Troubleshooting
 
+Common Issues and Solutions:
 
+"Python is not recognized" Error:
+1. Download Python from python.org
+2. During installation, check "Add Python to PATH"
+3. Restart computer
+4. Run INSTALL.bat again
 
-git clone https://github.com/ropevp/manifest_alert.git
-cd manifest_alert
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python main.py
-📋 Architecture
-PyQt6: Qt6 framework with card-based UI
+"Git is not recognized" Error:
+1. Download Git from git-scm.com
+2. Install with default settings
+3. Restart computer
+4. Run INSTALL.bat again
 
-JSON Storage: File-based configuration and acknowledgments
+Application Won't Start:
+1. Run launch_diagnostic.bat in your installation folder
+2. Follow the on-screen instructions
+3. If issues persist, run INSTALL.bat again
 
-Git Updates: Version management via GitHub
+No Desktop Shortcut Created:
+1. Run INSTALL.bat again
+2. The installer will recreate shortcuts automatically
 
-Virtual Environment: Isolated dependencies
+Manifests Not Showing:
+1. Check that config.json exists in your data folder
+2. Verify JSON formatting (use online JSON validator if needed)
+3. Restart the application
+
+Multi-PC Sync Not Working:
+1. Ensure all PCs point to the same shared folder
+2. Check network connectivity to shared folder
+3. Verify all PCs have read/write access to the folder
+
+Audio Alerts Not Playing:
+1. Right-click system tray → Settings
+2. Enable "Audio Alerts"
+3. Check computer volume settings
+4. Test with Windows sound settings
+
+Getting Help:
+- All error messages include step-by-step solutions
+- Run INSTALL.bat again to fix most installation issues
+- Check USER_INSTRUCTIONS.md for detailed configuration help
