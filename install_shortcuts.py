@@ -1,6 +1,6 @@
 import sys
 import os
-import subprocessi
+import subprocess
 from pathlib import Path
 
 def create_desktop_shortcut():

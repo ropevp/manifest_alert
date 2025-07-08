@@ -1,6 +1,25 @@
 @echo off
 REM =================================================================
-REM Manifest Alert System - ONE-CLICK INSTALLER & UPDATER
+REM Manifest Alert Systemecho.
+echo [3/4] Updating dependencies...
+if exist ".venv\Scripts\python.exe" (
+    .venv\Scripts\pip install -r requirements.txt
+) else (
+    echo Creating virtual environment...
+    python -m venv .venv
+    .venv\Scripts\pip install -r requirements.txt
+)
+
+if exist "data\config.json.backup" (
+    if not exist "data\config.json" (
+        copy "data\config.json.backup" "data\config.json" >nul
+        echo ✅ Settings restored
+    )
+)
+
+echo.
+echo [4/4] Updating desktop shortcuts...
+.venv\Scripts\python.exe install_shortcuts.pyTALLER & UPDATER
 REM Use this file for both fresh installation and updates
 REM Run this file in the folder where you want to install the application 
 REM Running C:\INSTALL.bat C: will create the folder C:\manifest_alerts
@@ -86,7 +105,7 @@ goto :end
 
 :update
 echo.
-echo [1/3] Backing up your settings...
+echo [1/4] Backing up your settings...
 if exist "data\config.json" (
     copy "data\config.json" "data\config.json.backup" >nul
     echo ✅ Settings backed up
@@ -95,7 +114,7 @@ if exist "data\config.json" (
 )
 
 echo.
-echo [2/3] Downloading latest version...
+echo [2/4] Downloading latest version...
 git fetch origin
 git reset --hard origin/main
 if %errorlevel% neq 0 (
