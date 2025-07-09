@@ -457,6 +457,10 @@ class AlertDisplay(QWidget):
         self.setWindowTitle("Manifest Times")
         self.setMinimumSize(1200, 800)
         
+        # Set window flags to ensure proper display behavior
+        from PyQt6.QtCore import Qt
+        self.setWindowFlags(Qt.WindowType.Window)  # Ensure it's treated as a normal window
+        
         # Alert state management
         self.alert_active = False
         self.acknowledging_in_progress = False  # Flag to prevent window restoration during acknowledgments
@@ -493,7 +497,7 @@ class AlertDisplay(QWidget):
         """Create the modern card layout"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 30 to 10
-        main_layout.setSpacing(10)  # Reduced spacing from 20 to 10
+        main_layout.setSpacing(3)  # Reduced spacing from 10 to 3 (75% reduction)
         
         # Header section
         header_layout = QHBoxLayout()
@@ -596,7 +600,7 @@ class AlertDisplay(QWidget):
         
         # Clock - DS-Digital font for 7-segment display look
         self.clock_label = QLabel()
-        self.clock_label.setFont(QFont("DS-Digital", 38, QFont.Weight.Bold))  # Increased from 32 to 38
+        self.clock_label.setFont(QFont("DS-Digital", 42, QFont.Weight.Bold))  # Increased to match MANIFEST TIMES header
         self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px; text-shadow: 0px 0px 5px #B8860B;")  # Golden yellow with subtle glow
         header_layout.addWidget(self.clock_label)
         
@@ -611,7 +615,7 @@ class AlertDisplay(QWidget):
             color: #000000;
             padding: 12px;
             border-radius: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 3px;  /* Reduced from 10px to 3px (70% reduction) */
         """)
         main_layout.addWidget(self.summary_label)
         
@@ -639,7 +643,7 @@ class AlertDisplay(QWidget):
         # Cards container
         cards_widget = QWidget()
         self.cards_layout = QGridLayout(cards_widget)
-        self.cards_layout.setSpacing(15)  # Reduced from 20 to 15
+        self.cards_layout.setSpacing(4)  # Reduced from 15 to 4 (about 75% reduction)
         self.cards_layout.setContentsMargins(10, 10, 10, 10)
         
         scroll_area.setWidget(cards_widget)
@@ -705,7 +709,7 @@ class AlertDisplay(QWidget):
     def apply_dark_theme(self):
         """Apply modern dark theme"""
         self.setStyleSheet("""
-            QWidget {
+            AlertDisplay {
                 background-color: #0f0f23;
                 color: #ffffff;
                 font-family: 'Segoe UI', Arial, sans-serif;
@@ -727,6 +731,14 @@ class AlertDisplay(QWidget):
             }
             QPushButton:pressed {
                 background-color: #2c35e6;
+            }
+            QFrame {
+                background-color: #0f0f23;
+                color: #ffffff;
+            }
+            QScrollArea {
+                background-color: #0f0f23;
+                color: #ffffff;
             }
             QMessageBox {
                 background-color: #1a1a2e;
@@ -805,19 +817,20 @@ class AlertDisplay(QWidget):
     def update_refresh_timer(self):
         """Update refresh timer interval based on alert state"""
         if self.refresh_timer:
-            if self.alert_active:
-                # Alert mode: 1 second for real-time updates
-                self.refresh_timer.start(1000)
-            else:
-                # Normal mode: 10 seconds
-                self.refresh_timer.start(10000)
+            # Always use 10 seconds - no need for 1-second updates during alerts
+            # This prevents excessive data refreshing that can cause window flashing
+            self.refresh_timer.start(10000)  # 10 seconds for all modes
     
     def update_flash_timer(self):
         """Start or stop flash timer based on alert state with single alarm instance"""
         if self.flash_timer and self.pause_timer:
             if self.alert_active:
-                # ALWAYS activate alarm display when alert is active (force to front)
-                self.activate_alarm_display()
+                # Always ensure alarm is on correct monitor when alert is active
+                # This handles both initial activation and settings changes during alerts
+                self.ensure_alarm_on_correct_monitor()
+                
+                # Stop TV fullscreen timer during active alerts to prevent conflicts
+                self.stop_tv_fullscreen_timer()
                 
                 # Only start flash timer if not already running
                 if not self.flash_timer.isActive() and not self.pause_timer.isActive():
@@ -838,6 +851,9 @@ class AlertDisplay(QWidget):
             else:
                 # Stop all flashing and sound when alert is cleared
                 self.stop_all_alarms()
+                
+                # Restart TV fullscreen timer when no more alerts (if enabled in settings)
+                self.restart_tv_timer_if_enabled()
     
     def reset_sound_flag(self):
         """Reset sound flag (fallback method)"""
@@ -880,41 +896,17 @@ class AlertDisplay(QWidget):
         if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
             self.tv_fullscreen_timer.stop()
     
-    def force_tv_fullscreen(self):
-        """Force the display to fullscreen (for TV mode)"""
-        settings = self.load_settings()
-        if settings.get('keep_fullscreen_tv', False):
-            # Only force fullscreen if not currently fullscreen
-            if not self.isFullScreen():
-                target_monitor = settings.get('alarm_monitor', 0)
-                
-                try:
-                    from PyQt6.QtGui import QGuiApplication
-                    screens = QGuiApplication.screens()
-                    
-                    if target_monitor < len(screens):
-                        target_screen = screens[target_monitor]
-                        screen_geometry = target_screen.geometry()
-                        center_x = screen_geometry.x() + screen_geometry.width() // 2
-                        center_y = screen_geometry.y() + screen_geometry.height() // 2
-                        
-                        # Position window at center of target monitor first
-                        self.move(center_x - self.width() // 2, center_y - self.height() // 2)
-                        
-                        # Small delay before fullscreen to ensure proper positioning
-                        QTimer.singleShot(50, self.showFullScreen)
-                    else:
-                        # Fallback to current monitor
-                        self.showFullScreen()
-                        
-                except Exception:
-                    # Fallback
-                    self.showFullScreen()
+    def restart_tv_timer_if_enabled(self):
+        """Restart TV fullscreen timer if enabled in settings and no active alerts"""
+        if not self.alert_active:  # Only restart if no alerts
+            settings = self.load_settings()
+            if settings.get('keep_fullscreen_tv', False):
+                self.start_tv_fullscreen_timer()
     
-    def activate_alarm_display(self):
-        """Bring window to foreground and fullscreen on selected monitor when alarm starts"""
+    def ensure_alarm_on_correct_monitor(self):
+        """Ensure alarm is displayed fullscreen on the correct monitor - simplified approach"""
         try:
-            # Load settings to get selected monitor
+            # Load current settings
             settings = self.load_settings()
             target_monitor = settings.get('alarm_monitor', 0)
             
@@ -922,50 +914,69 @@ class AlertDisplay(QWidget):
             from PyQt6.QtGui import QGuiApplication
             screens = QGuiApplication.screens()
             
-            if target_monitor < len(screens):
+            # Validate target monitor
+            if target_monitor >= len(screens):
+                target_monitor = 0
+            
+            # Check if we're already fullscreen on the correct monitor
+            if self.isFullScreen() and 0 <= target_monitor < len(screens):
                 target_screen = screens[target_monitor]
+                target_geometry = target_screen.geometry()
+                window_center = self.geometry().center()
                 
-                # Store current state for restoration
-                if not hasattr(self, 'alarm_previous_state'):
-                    if self.isFullScreen():
-                        self.alarm_previous_state = 'fullscreen'
-                    elif self.isMaximized():
-                        self.alarm_previous_state = 'maximized'
-                    else:
-                        self.alarm_previous_state = 'normal'
-                        self.alarm_previous_geometry = self.geometry()
-                
-                # Move to target screen center first (this ensures proper screen association)
-                screen_geometry = target_screen.geometry()
-                center_x = screen_geometry.x() + screen_geometry.width() // 2
-                center_y = screen_geometry.y() + screen_geometry.height() // 2
-                
-                # Position window at center of target monitor
-                self.move(center_x - self.width() // 2, center_y - self.height() // 2)
-                
-                # Bring to foreground
-                self.raise_()
-                self.activateWindow()
-                self.show()
-                
-                # Small delay to ensure window is properly positioned before fullscreen
-                from PyQt6.QtCore import QTimer
-                QTimer.singleShot(50, self.do_alarm_fullscreen)
-                
-                # Force focus
-                self.setFocus()
-                
-            else:
-                # Fallback: just bring to front on current monitor
-                self.raise_()
-                self.activateWindow()
-                self.showFullScreen()
-                
-        except Exception as e:
-            # Fallback: just bring to front
+                # If window center is within target monitor bounds, we're good
+                if target_geometry.contains(window_center):
+                    return  # Already on correct monitor
+            
+            # Need to move to correct monitor
+            print(f"DEBUG: Moving alarm to monitor {target_monitor}")
+            
+            # Exit fullscreen for repositioning
+            if self.isFullScreen():
+                self.setWindowState(Qt.WindowState.WindowNoState)
+            
+            # Ensure window is visible
+            self.show()
             self.raise_()
             self.activateWindow()
-            self.show()
+            
+            # Move to target monitor center
+            if 0 <= target_monitor < len(screens):
+                target_screen = screens[target_monitor]
+                screen_geometry = target_screen.geometry()
+                
+                center_x = screen_geometry.x() + screen_geometry.width() // 2
+                center_y = screen_geometry.y() + screen_geometry.height() // 2
+                new_x = center_x - self.width() // 2
+                new_y = center_y - self.height() // 2
+                
+                self.move(new_x, new_y)
+            
+            # Go fullscreen with a small delay
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, self.showFullScreen)
+            
+        except Exception as e:
+            print(f"DEBUG: Error in ensure_alarm_on_correct_monitor: {e}")
+    
+    def force_tv_fullscreen(self):
+        """Force the display to fullscreen (for TV mode) - improved logic"""
+        settings = self.load_settings()
+        if settings.get('keep_fullscreen_tv', False):
+            # Only force fullscreen if:
+            # 1. Not currently fullscreen
+            # 2. No active alarm (alerts take priority)
+            # 3. Not in the middle of acknowledging (prevent interruption)
+            if (not self.isFullScreen() and 
+                not self.alert_active and 
+                not getattr(self, 'acknowledging_in_progress', False)):
+                # Simple fullscreen for TV mode
+                self.showFullScreen()
+    
+    def activate_alarm_display(self):
+        """Legacy method - now handled by ensure_alarm_on_correct_monitor"""
+        # This method is kept for compatibility but functionality moved to ensure_alarm_on_correct_monitor
+        self.ensure_alarm_on_correct_monitor()
     
     def restore_alarm_display(self):
         """Restore window to previous state when alarm ends"""
@@ -994,13 +1005,21 @@ class AlertDisplay(QWidget):
             pass
     
     def do_alarm_fullscreen(self):
-        """Complete the fullscreen transition for alarm (called after positioning)"""
-        # Ensure window is normal state first, then go fullscreen
-        if self.isMaximized():
-            self.showNormal()
-        # Use a small delay to ensure proper state transition
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(10, lambda: self.showFullScreen())
+        """Complete the fullscreen transition for alarm (simplified)"""
+        # Simple fullscreen activation with Windows-specific fix
+        self.showFullScreen()
+        self.raise_()
+        self.activateWindow()
+        
+        # Additional Windows-specific activation
+        try:
+            import os
+            if os.name == 'nt':  # Windows
+                import ctypes
+                hwnd = int(self.winId())
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
 
     def toggle_flash(self):
         """Toggle flash state with 3 red flashes then random pause"""
@@ -1048,12 +1067,9 @@ class AlertDisplay(QWidget):
             # Pure black background
             bg_color = "#000000"
             
-        # Apply to main widget
+        # Apply to main widget - use more specific selectors to avoid interfering with window controls
         self.setStyleSheet(f"""
             AlertDisplay {{
-                background-color: {bg_color};
-            }}
-            QWidget {{
                 background-color: {bg_color};
                 color: #ffffff;
                 font-family: 'Segoe UI', Arial, sans-serif;
@@ -1075,6 +1091,14 @@ class AlertDisplay(QWidget):
             }}
             QPushButton:pressed {{
                 background-color: #2c35e6;
+            }}
+            QFrame {{
+                background-color: {bg_color};
+                color: #ffffff;
+            }}
+            QScrollArea {{
+                background-color: {bg_color};
+                color: #ffffff;
             }}
             QMessageBox {{
                 background-color: #1a1a2e;
@@ -1103,7 +1127,7 @@ class AlertDisplay(QWidget):
     def update_clock(self):
         """Update the clock display"""
         now = datetime.now()
-        self.clock_label.setText(now.strftime('%H:%M:%S'))
+        self.clock_label.setText(now.strftime('%H:%M'))
     
     def load_config(self):
         """Load configuration from settings-specified folder or fallback"""
@@ -1770,11 +1794,17 @@ class AlertDisplay(QWidget):
             with open(settings_path, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=2)
             
-            # If TV mode was enabled, start the TV fullscreen timer
+            # Handle TV mode changes
             if final_tv_mode:
                 self.start_tv_fullscreen_timer()
             else:
                 self.stop_tv_fullscreen_timer()
+            
+            # If alarm monitor changed and we have an active alert, move immediately
+            old_monitor = original_settings.get('alarm_monitor', 0)
+            if final_monitor != old_monitor and self.alert_active:
+                print(f"DEBUG: Monitor setting changed during active alarm, switching immediately")
+                self.ensure_alarm_on_correct_monitor()
             
             QMessageBox.information(self, "Settings", "Settings saved successfully!")
             dialog.accept()
