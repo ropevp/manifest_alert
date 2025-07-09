@@ -1,0 +1,12 @@
+{
+  "manifests": [
+    {
+      "time": "10:00",
+      "carriers": [
+        "AUP International for NZ",
+        "Australia Post Metro",
+        "EParcel Postplus"
+      ]
+    }
+  ]
+}

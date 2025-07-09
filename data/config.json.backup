@@ -1,0 +1,17 @@
+{
+  "manifests": [
+    {
+      "time": "14:41",
+      "carriers": [
+        "Test Carrier 1",
+        "Test Carrier 2"
+      ]
+    },
+    {
+      "time": "14:47",
+      "carriers": [
+        "Future Carrier"
+      ]
+    }
+  ]
+}

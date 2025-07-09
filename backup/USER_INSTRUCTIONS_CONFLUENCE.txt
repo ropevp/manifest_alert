@@ -1,0 +1,212 @@
+Manifest Alert System V2 - User Instructions
+
+== Overview ==
+Professional warehouse-grade PyQt6 desktop application for shipping manifest alerts with modern SpaceX-style mission control UI and real-time synchronization across multiple PCs.
+
+== Quick Start ==
+
+=== Installation ===
+1. Download INSTALL.bat from GitHub repository
+2. Create a folder for the application (e.g., C:\ManifestAlerts)
+3. Place INSTALL.bat in the folder and run it
+4. Installation is fully automated - creates virtual environment, installs PyQt6 dependencies
+5. Launch via desktop shortcut "Manifest Alert System"
+
+=== Daily Usage ===
+* Launch: Double-click desktop shortcut
+* Monitor Status: Window shows color-coded status cards for each manifest
+* Acknowledge: Click manifest cards to mark as handled with reason
+* Multi-Monitor: Use monitor switch button to cycle through displays
+* Settings: Click gear icon to configure data storage and username
+
+== V2 Modern Interface ==
+
+=== SpaceX-Style UI ===
+* Dark theme with deep space background (#0f0f23)
+* Card-based layout with 320x200px status cards
+* Large typography optimized for warehouse TV displays (36pt title, 32pt clock)
+* Professional color coding: Red (Active), Blue (Pending), Green (Acknowledged), Orange (Missed)
+
+=== Status Cards ===
+Each manifest appears as a professional status card showing:
+* Large time display (e.g., "08:00")
+* Carrier name and status
+* Color-coded status indicator
+* Gradient status bar at bottom
+* Acknowledgment information when completed
+
+=== Enhanced Features ===
+* 3-column responsive grid layout
+* TV-optimized fonts for warehouse visibility
+* Real-time updates without window disruption
+* Clean card recreation system (no complex tree operations)
+* Professional Windows integration with taskbar
+
+== Technical Architecture ==
+
+=== PyQt6 Framework ===
+* Modern Qt6 APIs with improved performance over PyQt5
+* Stable 400-line display module vs 1400+ lines in previous versions
+* Eliminated window state issues from tree widget anti-patterns
+* Resource efficient with better memory management
+
+=== Core Components ===
+* main.py - PyQt6 entry point with Windows integration
+* alert_display.py - Modern card-based UI with SpaceX styling
+* data_manager.py - JSON operations for configuration and acknowledgments
+* scheduler.py - Time-based manifest status calculation
+* settings_manager.py - Configurable storage paths with validation
+
+== Configuration ==
+
+=== Data Storage ===
+Dual-location strategy for optimal flexibility:
+* App settings: app_data/settings.json (persistent location)
+* Sync data: Configurable path for config.json and acknowledgments.json
+* Multi-PC sync: Shared network or cloud folders for real-time coordination
+* Permission validation: Automatic write-access testing
+
+=== Settings Dialog ===
+Access via gear icon button:
+* Username: Custom display name for acknowledgments
+* Data Folder: Path for shared config.json and acknowledgments.json files
+* Alarm Monitor: Select which monitor displays fullscreen alerts
+* Path validation with real-time feedback (green=valid, red=invalid)
+
+=== Multi-PC Setup ===
+For warehouse coordination across multiple computers:
+1. Configure same data folder path on all PCs
+2. Use network drive (\\server\share\manifest_data\) or cloud storage
+3. Each PC can have different username for accountability
+4. Real-time synchronization within seconds of acknowledgments
+
+== Manifest Configuration (config.json) ==
+
+=== File Structure ===
+{
+  "manifests": [
+    {
+      "time": "08:00",
+      "carriers": ["FedEx", "UPS Ground"]
+    },
+    {
+      "time": "14:30", 
+      "carriers": ["Amazon", "DHL"]
+    }
+  ]
+}
+
+=== Time Slots ===
+* Format: 24-hour "HH:MM" (e.g., "08:00", "14:30")
+* Multiple carriers per time slot supported
+* System automatically calculates status based on current time
+* Reload button refreshes configuration without restart
+
+== Alert System ==
+
+=== Status Types ===
+* PENDING (Blue): Upcoming manifests, more than 15 minutes away
+* ACTIVE (Red): Current time matches scheduled time (±15 minutes)
+* MISSED (Orange): Past due and unacknowledged
+* ACKNOWLEDGED (Green): Completed with user name and reason
+
+=== Visual Alerts ===
+* Fullscreen display on selected monitor during active alerts
+* Red background flashing during active/missed status
+* Professional status summary bar with countdown to next manifest
+* Large typography for warehouse TV visibility
+
+=== Multi-Monitor Support ===
+* Monitor selection button cycles through all connected displays
+* Settings dialog allows specific monitor selection for alarm display
+* Window positioning system centers on target monitor
+* Support for mixed resolution setups
+
+== Acknowledgment System ==
+
+=== Process ===
+1. Click any status card to acknowledge
+2. Enter specific reason for the acknowledgment
+3. System records username, timestamp, and reason
+4. Card turns green and shows acknowledgment details
+5. Other PCs see update within seconds
+
+=== Data Storage (acknowledgments.json) ===
+[
+  {
+    "date": "2025-07-04",
+    "manifest_time": "08:00",
+    "carrier": "FedEx",
+    "user": "John Smith",
+    "timestamp": "2025-07-04T08:05:23",
+    "reason": "Package delivered to receiving dock"
+  }
+]
+
+=== Accountability ===
+* User names displayed on acknowledged items
+* Timestamp tracking for audit trails
+* Reason required for all acknowledgments
+* Historical data preserved for reporting
+
+== Installation Details ==
+
+=== Requirements ===
+* Python 3.8+ (automatically handled by INSTALL.bat)
+* PyQt6==6.8.0 with multimedia support
+* Virtual environment created automatically
+* Windows 10/11 for optimal integration
+
+=== File Structure ===
+manifest_alerts/
+├── main.py                    # PyQt6 application entry point
+├── alert_display.py           # Modern card-based UI (400 lines)
+├── data_manager.py           # JSON file operations
+├── scheduler.py              # Status calculation logic
+├── settings_manager.py       # Configuration and validation
+├── .venv/                    # Python virtual environment
+├── app_data/                 # Application settings
+├── backup/                   # Backup files and old versions
+└── resources/                # Icons and audio files
+
+=== Updates ===
+* Run same INSTALL.bat for updates
+* Automatic Git detection and update
+* Settings and data preserved
+* Backup created before updates
+
+== Troubleshooting ==
+
+=== Common Issues ===
+* Python not recognized: Reinstall Python with PATH option checked
+* Import errors: Run INSTALL.bat to rebuild virtual environment
+* Data sync issues: Verify shared folder permissions and network access
+* Display issues: Check monitor selection in settings dialog
+
+=== Diagnostic Tools ===
+* launch_diagnostic.bat: Comprehensive system check
+* Settings dialog: Real-time path validation
+* Error messages include specific solutions
+* backup/ folder contains previous versions if rollback needed
+
+== Performance Notes ==
+
+=== Optimizations ===
+* 24/7 operation design for continuous warehouse use
+* Minimal CPU and memory footprint
+* Efficient network operations for shared storage
+* Resource-efficient PyQt6 framework
+
+=== Best Practices ===
+* Use network/cloud storage for multi-PC coordination
+* Configure usernames for accountability
+* Regular backup of configuration files
+* Monitor system tray for quick access to functions
+
+== Version Information ==
+Version: 2.0 (July 2025)
+Framework: PyQt6 6.8.0
+Architecture: Modern card-based UI with SpaceX styling
+Target: Warehouse-grade 24/7 operation
+
+For technical support or advanced configuration, contact warehouse management or IT department.

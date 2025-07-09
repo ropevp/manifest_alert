@@ -1,5 +1,5 @@
 """
-Manifest Alerts V2 - Modern Dark Theme Display
+Manifest Alerts V2 - SpaceX-Style Mission Control Display
 Modern, professional TV display for warehouse operations
 """
 
@@ -27,27 +27,15 @@ try:
     from data_manager import load_config
     from settings_manager import get_settings_manager
 except ImportError:
-    # Fallback if imports fail - should not happen in production
-    print("WARNING: Failed to import core modules, using minimal fallback")
-    
+    # Fallback for testing
     def get_manifest_status(time_str, now):
-        # Emergency fallback - try basic time comparison
-        from datetime import datetime, timedelta
-        try:
-            today = now.date()
-            manifest_time = datetime.strptime(time_str, "%H:%M").replace(year=today.year, month=today.month, day=today.day)
-            if now >= manifest_time + timedelta(minutes=30):
-                return "Missed"
-            elif now >= manifest_time - timedelta(minutes=2):
-                return "Active"
-            else:
-                return "Pending"
-        except:
-            return "Unknown"
-    
+        return "OPEN"
     def load_config():
-        return {"manifests": []}
-    
+        return {"manifests": [
+            {"time": "08:00", "carriers": ["DHL", "UPS"]},
+            {"time": "12:00", "carriers": ["FedEx", "USPS"]},
+            {"time": "16:00", "carriers": ["DPD", "TNT"]}
+        ]}
     def get_settings_manager():
         class DummySettings:
             def get_acknowledgments_path(self):
@@ -118,7 +106,6 @@ class StatusCard(QFrame):
         
         # Left part: carriers (will be recreated as clickable labels)
         self.carriers_widget = QWidget()
-        self.carriers_widget.setStyleSheet("background: transparent;")
         self.carriers_layout = QVBoxLayout(self.carriers_widget)
         self.carriers_layout.setContentsMargins(0, 0, 0, 0)
         self.carriers_layout.setSpacing(1)  # Extremely tight - reduced from 2 to 1
@@ -161,7 +148,7 @@ class StatusCard(QFrame):
         self.setLayout(layout)
     
     def update_styling(self):
-        """Update colors based on status - only borders and font colors on transparent background"""
+        """Update colors based on status - only borders and font colors on black background"""
         if self.status == "ACTIVE":
             border_color = "#ff4757"
             text_color = "#ffffff"
@@ -458,10 +445,6 @@ class AlertDisplay(QWidget):
         self.setWindowTitle("Manifest Times")
         self.setMinimumSize(1200, 800)
         
-        # Set window flags to ensure proper display behavior
-        from PyQt6.QtCore import Qt
-        self.setWindowFlags(Qt.WindowType.Window)  # Ensure it's treated as a normal window
-        
         # Alert state management
         self.alert_active = False
         self.acknowledging_in_progress = False  # Flag to prevent window restoration during acknowledgments
@@ -481,7 +464,6 @@ class AlertDisplay(QWidget):
         self.refresh_timer = None
         self.flash_timer = None  # Timer for alarm background flashing
         self.pause_timer = None  # Timer for pause between flash cycles
-        self.tv_fullscreen_timer = None  # Timer for TV fullscreen mode
         self.flash_state = False  # Track flash on/off state
         self.flash_cycle_count = 0  # Track number of flashes in current cycle
         self.is_paused = False  # Track if we're in pause mode
@@ -495,10 +477,10 @@ class AlertDisplay(QWidget):
         self.populate_data()
     
     def setup_ui(self):
-        """Create the modern card layout"""
+        """Create the modern mission control layout"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(30, 10, 30, 30)  # Reduced top margin from 30 to 10
-        main_layout.setSpacing(3)  # Reduced spacing from 10 to 3 (75% reduction)
+        main_layout.setSpacing(10)  # Reduced spacing from 20 to 10
         
         # Header section
         header_layout = QHBoxLayout()
@@ -509,18 +491,7 @@ class AlertDisplay(QWidget):
         title_label.setStyleSheet("color: #ffffff; padding: 0px;")  # Removed bottom padding
         header_layout.addWidget(title_label)
         
-        # Status summary bar moved into header
-        self.summary_label = QLabel("SYSTEM NOMINAL")
-        self.summary_label.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))  # Increased from 22 to 26 for better visibility in header
-        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.summary_label.setStyleSheet("""
-            background-color: #2ed573;
-            color: #000000;
-            padding: 8px 20px;  /* Adjusted padding for header position */
-            border-radius: 8px;
-            margin-left: 20px;  /* Only left margin for separation from title */
-        """)
-        header_layout.addWidget(self.summary_label, 1)  # Give stretch factor of 1 to expand horizontally
+        header_layout.addStretch()
         
         # Multi-monitor button
         self.monitor_btn = QPushButton("🖥️")
@@ -612,11 +583,24 @@ class AlertDisplay(QWidget):
         
         # Clock - DS-Digital font for 7-segment display look
         self.clock_label = QLabel()
-        self.clock_label.setFont(QFont("DS-Digital", 42, QFont.Weight.Bold))  # Increased to match MANIFEST TIMES header
-        self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px;")  # Golden yellow without shadow
+        self.clock_label.setFont(QFont("DS-Digital", 38, QFont.Weight.Bold))  # Increased from 32 to 38
+        self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px; text-shadow: 0px 0px 5px #B8860B;")  # Golden yellow with subtle glow
         header_layout.addWidget(self.clock_label)
         
         main_layout.addLayout(header_layout)
+        
+        # Status summary bar
+        self.summary_label = QLabel("SYSTEM NOMINAL")
+        self.summary_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))  # Increased from 18 to 22
+        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.summary_label.setStyleSheet("""
+            background-color: #2ed573;
+            color: #000000;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        """)
+        main_layout.addWidget(self.summary_label)
         
         # Scrollable cards area
         scroll_area = QScrollArea()
@@ -642,7 +626,7 @@ class AlertDisplay(QWidget):
         # Cards container
         cards_widget = QWidget()
         self.cards_layout = QGridLayout(cards_widget)
-        self.cards_layout.setSpacing(4)  # Reduced from 15 to 4 (about 75% reduction)
+        self.cards_layout.setSpacing(15)  # Reduced from 20 to 15
         self.cards_layout.setContentsMargins(10, 10, 10, 10)
         
         scroll_area.setWidget(cards_widget)
@@ -682,16 +666,12 @@ class AlertDisplay(QWidget):
             getattr(self, 'alert_active', False)):
             # Wait 500ms before restarting to ensure clean playback (3-second file needs breathing room)
             QTimer.singleShot(500, self.restart_alarm_audio)
-        elif status == QMediaPlayer.MediaStatus.InvalidMedia:
-            # Reset flag if media becomes invalid
-            self.alarm_sound_playing = False
 
     def restart_alarm_audio(self):
         """Restart alarm audio if still in alarm mode"""
         if (getattr(self, 'alarm_sound_playing', False) and 
             getattr(self, 'alert_active', False) and
-            self.alert_sound and
-            self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
+            self.alert_sound):
             # Stop and restart for cleaner playback
             self.alert_sound.stop()
             # Small delay to ensure stop completes
@@ -706,9 +686,9 @@ class AlertDisplay(QWidget):
         super().changeEvent(event)
     
     def apply_dark_theme(self):
-        """Apply modern dark theme"""
+        """Apply SpaceX-style dark theme"""
         self.setStyleSheet("""
-            AlertDisplay {
+            QWidget {
                 background-color: #0f0f23;
                 color: #ffffff;
                 font-family: 'Segoe UI', Arial, sans-serif;
@@ -730,14 +710,6 @@ class AlertDisplay(QWidget):
             }
             QPushButton:pressed {
                 background-color: #2c35e6;
-            }
-            QFrame {
-                background-color: #0f0f23;
-                color: #ffffff;
-            }
-            QScrollArea {
-                background-color: #0f0f23;
-                color: #ffffff;
             }
             QMessageBox {
                 background-color: #1a1a2e;
@@ -774,8 +746,6 @@ class AlertDisplay(QWidget):
             self.flash_timer.stop()
         if hasattr(self, 'pause_timer') and self.pause_timer:
             self.pause_timer.stop()
-        if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
-            self.tv_fullscreen_timer.stop()
         
         # Initialize alarm state tracking
         self.alarm_sound_playing = False  # Track if sound is currently playing
@@ -800,58 +770,44 @@ class AlertDisplay(QWidget):
         self.pause_timer.timeout.connect(self.resume_flashing)
         self.pause_timer.setSingleShot(True)  # One-shot timer for pauses
         
-        # TV fullscreen timer - forces fullscreen every minute for TV displays
-        self.tv_fullscreen_timer = QTimer(self)
-        self.tv_fullscreen_timer.timeout.connect(self.force_tv_fullscreen)
-        
         # Timer starts/stops based on alert state in update_flash_timer()
         
         self.update_clock()
-        
-        # Start TV fullscreen timer if enabled in settings
-        settings = self.load_settings()
-        if settings.get('keep_fullscreen_tv', False):
-            self.start_tv_fullscreen_timer()
     
     def update_refresh_timer(self):
         """Update refresh timer interval based on alert state"""
         if self.refresh_timer:
-            # Always use 10 seconds - no need for 1-second updates during alerts
-            # This prevents excessive data refreshing that can cause window flashing
-            self.refresh_timer.start(10000)  # 10 seconds for all modes
+            if self.alert_active:
+                # Alert mode: 1 second for real-time updates
+                self.refresh_timer.start(1000)
+            else:
+                # Normal mode: 10 seconds
+                self.refresh_timer.start(10000)
     
     def update_flash_timer(self):
         """Start or stop flash timer based on alert state with single alarm instance"""
         if self.flash_timer and self.pause_timer:
             if self.alert_active:
-                # Always ensure alarm is on correct monitor when alert is active
-                # This handles both initial activation and settings changes during alerts
-                self.ensure_alarm_on_correct_monitor()
-                
-                # Stop TV fullscreen timer during active alerts to prevent conflicts
-                self.stop_tv_fullscreen_timer()
-                
-                # Only start flash timer if not already running
+                # Only start alarm if not already running
                 if not self.flash_timer.isActive() and not self.pause_timer.isActive():
-                    # Start the flash cycle with 5 red flashes
+                    # ALARM ACTIVATION: Bring to foreground and fullscreen on selected monitor
+                    self.activate_alarm_display()
+                    
+                    # Start the flash cycle with 3 red flashes
                     self.flash_cycle_count = 0
                     self.is_paused = False
-                    # Fixed flash speed - 500ms on/off (1 second total per flash)
-                    flash_interval = 500  # 500ms for steady rhythm
+                    # Faster random flash speed between 2-10 Hz (100ms to 500ms) for more intense alarm
+                    import random
+                    flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
                     self.flash_timer.start(flash_interval)
-                
-                # Start continuous alarm sound when alarm starts - improved protection
-                if (self.alert_sound and 
-                    not getattr(self, 'alarm_sound_playing', False) and
-                    self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
-                    self.alarm_sound_playing = True
-                    self.alert_sound.play()  # Will loop automatically via media status handler
+                    
+                    # Start continuous alarm sound when alarm starts
+                    if self.alert_sound and not getattr(self, 'alarm_sound_playing', False):
+                        self.alarm_sound_playing = True
+                        self.alert_sound.play()  # Will loop automatically via media status handler
             else:
                 # Stop all flashing and sound when alert is cleared
                 self.stop_all_alarms()
-                
-                # Restart TV fullscreen timer when no more alerts (if enabled in settings)
-                self.restart_tv_timer_if_enabled()
     
     def reset_sound_flag(self):
         """Reset sound flag (fallback method)"""
@@ -874,37 +830,24 @@ class AlertDisplay(QWidget):
         if self.alert_sound:
             self.alert_sound.stop()
         
-        # DO NOT restore window state when alerts end - let user control window state
-        # Only clean up alarm state tracking without changing window
-        if hasattr(self, 'alarm_previous_state'):
-            delattr(self, 'alarm_previous_state')
-        if hasattr(self, 'alarm_previous_geometry'):
-            delattr(self, 'alarm_previous_geometry')
+        # Only restore window state if NO alerts are active AND not in the middle of acknowledging
+        print(f"DEBUG: stop_all_alarms, alert_active={getattr(self, 'alert_active', False)}, acknowledging_in_progress={getattr(self, 'acknowledging_in_progress', False)}")
+        if not getattr(self, 'alert_active', False) and not getattr(self, 'acknowledging_in_progress', False):
+            print("DEBUG: Calling restore_alarm_display because no alerts active and not acknowledging")
+            self.restore_alarm_display()
+        else:
+            if getattr(self, 'alert_active', False):
+                print("DEBUG: NOT restoring window - alerts still active")
+            if getattr(self, 'acknowledging_in_progress', False):
+                print("DEBUG: NOT restoring window - acknowledgment in progress")
             
         # Ensure normal background
         self.apply_background_style()
     
-    def start_tv_fullscreen_timer(self):
-        """Start the TV fullscreen timer (60 seconds interval)"""
-        if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
-            self.tv_fullscreen_timer.start(60000)  # 60 seconds = 1 minute
-    
-    def stop_tv_fullscreen_timer(self):
-        """Stop the TV fullscreen timer"""
-        if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
-            self.tv_fullscreen_timer.stop()
-    
-    def restart_tv_timer_if_enabled(self):
-        """Restart TV fullscreen timer if enabled in settings and no active alerts"""
-        if not self.alert_active:  # Only restart if no alerts
-            settings = self.load_settings()
-            if settings.get('keep_fullscreen_tv', False):
-                self.start_tv_fullscreen_timer()
-    
-    def ensure_alarm_on_correct_monitor(self):
-        """Ensure alarm is displayed fullscreen on the correct monitor - simplified approach"""
+    def activate_alarm_display(self):
+        """Bring window to foreground and fullscreen on selected monitor when alarm starts"""
         try:
-            # Load current settings
+            # Load settings to get selected monitor
             settings = self.load_settings()
             target_monitor = settings.get('alarm_monitor', 0)
             
@@ -912,73 +855,56 @@ class AlertDisplay(QWidget):
             from PyQt6.QtGui import QGuiApplication
             screens = QGuiApplication.screens()
             
-            # Validate target monitor
-            if target_monitor >= len(screens):
-                target_monitor = 0
-            
-            # Check if we're already fullscreen on the correct monitor
-            if self.isFullScreen() and 0 <= target_monitor < len(screens):
+            if target_monitor < len(screens):
                 target_screen = screens[target_monitor]
-                target_geometry = target_screen.geometry()
-                window_center = self.geometry().center()
                 
-                # If window center is within target monitor bounds, we're good
-                if target_geometry.contains(window_center):
-                    return  # Already on correct monitor
-            
-            # Need to move to correct monitor
-            print(f"DEBUG: Moving alarm to monitor {target_monitor}")
-            
-            # Exit fullscreen for repositioning
-            if self.isFullScreen():
-                self.setWindowState(Qt.WindowState.WindowNoState)
-            
-            # Ensure window is visible
-            self.show()
-            self.raise_()
-            self.activateWindow()
-            
-            # Move to target monitor center
-            if 0 <= target_monitor < len(screens):
-                target_screen = screens[target_monitor]
+                # Store current state for restoration
+                if not hasattr(self, 'alarm_previous_state'):
+                    if self.isFullScreen():
+                        self.alarm_previous_state = 'fullscreen'
+                    elif self.isMaximized():
+                        self.alarm_previous_state = 'maximized'
+                    else:
+                        self.alarm_previous_state = 'normal'
+                        self.alarm_previous_geometry = self.geometry()
+                
+                # Move to target screen center first (this ensures proper screen association)
                 screen_geometry = target_screen.geometry()
-                
                 center_x = screen_geometry.x() + screen_geometry.width() // 2
                 center_y = screen_geometry.y() + screen_geometry.height() // 2
-                new_x = center_x - self.width() // 2
-                new_y = center_y - self.height() // 2
                 
-                self.move(new_x, new_y)
-            
-            # Go fullscreen with a small delay
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(100, self.showFullScreen)
-            
-        except Exception as e:
-            print(f"DEBUG: Error in ensure_alarm_on_correct_monitor: {e}")
-    
-    def force_tv_fullscreen(self):
-        """Force the display to fullscreen (for TV mode) - improved logic"""
-        settings = self.load_settings()
-        if settings.get('keep_fullscreen_tv', False):
-            # Only force fullscreen if:
-            # 1. Not currently fullscreen
-            # 2. No active alarm (alerts take priority)
-            # 3. Not in the middle of acknowledging (prevent interruption)
-            if (not self.isFullScreen() and 
-                not self.alert_active and 
-                not getattr(self, 'acknowledging_in_progress', False)):
-                # Simple fullscreen for TV mode
+                # Position window at center of target monitor
+                self.move(center_x - self.width() // 2, center_y - self.height() // 2)
+                
+                # Bring to foreground
+                self.raise_()
+                self.activateWindow()
+                self.show()
+                
+                # Small delay to ensure window is properly positioned before fullscreen
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(50, self.do_alarm_fullscreen)
+                
+                # Force focus
+                self.setFocus()
+                
+            else:
+                # Fallback: just bring to front on current monitor
+                self.raise_()
+                self.activateWindow()
                 self.showFullScreen()
-    
-    def activate_alarm_display(self):
-        """Legacy method - now handled by ensure_alarm_on_correct_monitor"""
-        # This method is kept for compatibility but functionality moved to ensure_alarm_on_correct_monitor
-        self.ensure_alarm_on_correct_monitor()
+                
+        except Exception as e:
+            # Fallback: just bring to front
+            self.raise_()
+            self.activateWindow()
+            self.show()
     
     def restore_alarm_display(self):
         """Restore window to previous state when alarm ends"""
+        print(f"DEBUG: restore_alarm_display called, alert_active={getattr(self, 'alert_active', False)}")
         if hasattr(self, 'alarm_previous_state'):
+            print(f"DEBUG: Restoring from state: {self.alarm_previous_state}")
             try:
                 if self.alarm_previous_state == 'fullscreen':
                     # Was already fullscreen, stay fullscreen
@@ -999,28 +925,19 @@ class AlertDisplay(QWidget):
                 # Fallback to normal window if restore fails
                 self.showNormal()
         else:
-            # No alarm_previous_state found - first run
-            pass
+            print("DEBUG: No alarm_previous_state found")
     
     def do_alarm_fullscreen(self):
-        """Complete the fullscreen transition for alarm (simplified)"""
-        # Simple fullscreen activation with Windows-specific fix
-        self.showFullScreen()
-        self.raise_()
-        self.activateWindow()
-        
-        # Additional Windows-specific activation
-        try:
-            import os
-            if os.name == 'nt':  # Windows
-                import ctypes
-                hwnd = int(self.winId())
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
-        except Exception:
-            pass
+        """Complete the fullscreen transition for alarm (called after positioning)"""
+        # Ensure window is normal state first, then go fullscreen
+        if self.isMaximized():
+            self.showNormal()
+        # Use a small delay to ensure proper state transition
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(10, lambda: self.showFullScreen())
 
     def toggle_flash(self):
-        """Toggle flash state with 5 red flashes then 4 second pause"""
+        """Toggle flash state with 3 red flashes then random pause"""
         if self.is_paused:
             return
             
@@ -1030,28 +947,30 @@ class AlertDisplay(QWidget):
         if self.flash_state:
             self.flash_cycle_count += 1
             
-            # After 5 red flashes, start 4 second pause
-            if self.flash_cycle_count >= 5:
+            # After 3 red flashes, start random pause (3-10 seconds)
+            if self.flash_cycle_count >= 3:
                 self.flash_timer.stop()
                 self.is_paused = True
                 self.flash_state = False  # Ensure background goes to normal during pause
                 self.apply_background_style()
                 
-                # Fixed 4 second pause
-                pause_duration = 4000  # 4 seconds in milliseconds
+                # Random pause between 3-10 seconds
+                import random
+                pause_duration = random.randint(3000, 10000)  # 3-10 seconds in milliseconds
                 self.pause_timer.start(pause_duration)
                 return
         
         self.apply_background_style()
     
     def resume_flashing(self):
-        """Resume flashing after 4 second pause with fixed timing"""
+        """Resume flashing after random pause with new random speed"""
         # Only resume if alert is still active and we're not already flashing
         if self.alert_active and not self.flash_timer.isActive():
             self.flash_cycle_count = 0
             self.is_paused = False
-            # Fixed flash speed - 500ms on/off (1 second total per flash)
-            flash_interval = 500  # 500ms for steady rhythm
+            # New faster random flash speed for next cycle (2-10 Hz)
+            import random
+            flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
             self.flash_timer.start(flash_interval)
     
     def apply_background_style(self):
@@ -1063,9 +982,12 @@ class AlertDisplay(QWidget):
             # Pure black background
             bg_color = "#000000"
             
-        # Apply to main widget - use more specific selectors to avoid interfering with window controls
+        # Apply to main widget
         self.setStyleSheet(f"""
             AlertDisplay {{
+                background-color: {bg_color};
+            }}
+            QWidget {{
                 background-color: {bg_color};
                 color: #ffffff;
                 font-family: 'Segoe UI', Arial, sans-serif;
@@ -1087,14 +1009,6 @@ class AlertDisplay(QWidget):
             }}
             QPushButton:pressed {{
                 background-color: #2c35e6;
-            }}
-            QFrame {{
-                background-color: {bg_color};
-                color: #ffffff;
-            }}
-            QScrollArea {{
-                background-color: {bg_color};
-                color: #ffffff;
             }}
             QMessageBox {{
                 background-color: #1a1a2e;
@@ -1123,7 +1037,7 @@ class AlertDisplay(QWidget):
     def update_clock(self):
         """Update the clock display"""
         now = datetime.now()
-        self.clock_label.setText(now.strftime('%H:%M'))
+        self.clock_label.setText(now.strftime('%H:%M:%S'))
     
     def load_config(self):
         """Load configuration from settings-specified folder or fallback"""
@@ -1200,12 +1114,12 @@ class AlertDisplay(QWidget):
             # Process carriers for this time - determine overall time slot status first
             manifest_data = []
             time_slot_status = get_manifest_status(time_str, now)
-            # Processing time slot for acknowledgment check
+            print(f"DEBUG: Processing time {time_str}, time_slot_status={time_slot_status}")
             
             for carrier in manifest.get('carriers', []):
                 ack_key = f"{today}_{time_str}_{carrier}"
                 is_acked = ack_key in acks
-                # Check acknowledgment status for active/missed items
+                print(f"DEBUG: Carrier {carrier}, ack_key={ack_key}, is_acked={is_acked}")
                 
                 if is_acked:
                     # Check if it was a late acknowledgment
@@ -1239,7 +1153,9 @@ class AlertDisplay(QWidget):
             row += 1
         
         # Update alert state
+        print(f"DEBUG populate_data: active_count={active_count}, missed_count={missed_count}, open_count={open_count}, acked_count={acked_count}")
         self.alert_active = (active_count > 0 or missed_count > 0)
+        print(f"DEBUG populate_data: alert_active={self.alert_active}")
         
         # Update refresh timer interval based on alert state
         self.update_refresh_timer()
@@ -1307,9 +1223,9 @@ class AlertDisplay(QWidget):
         self.summary_label.setStyleSheet(f"""
             background-color: {color};
             color: {text_color};
-            padding: 8px 20px;  /* Adjusted padding for header position */
+            padding: 12px;
             border-radius: 8px;
-            margin-left: 20px;  /* Only left margin for separation from title */
+            margin-bottom: 10px;
         """)
     
     def get_ack_path(self):
@@ -1494,52 +1410,6 @@ class AlertDisplay(QWidget):
         monitor_layout.addWidget(monitor_help)
         
         form_layout.addRow("Alarm Monitor:", monitor_widget)
-        
-        # TV Display Checkbox
-        tv_widget = QWidget()
-        tv_layout = QVBoxLayout(tv_widget)
-        tv_layout.setContentsMargins(0, 0, 0, 0)
-        tv_layout.setSpacing(5)
-        
-        from PyQt6.QtWidgets import QCheckBox
-        self.tv_checkbox = QCheckBox("Keep Full Screen for TV")
-        self.tv_checkbox.setStyleSheet("""
-            QCheckBox {
-                color: #ffffff;
-                font-size: 14px;
-                spacing: 8px;
-            }
-            QCheckBox::indicator {
-                width: 20px;
-                height: 20px;
-                border: 2px solid #3742fa;
-                border-radius: 4px;
-                background-color: #2c2c54;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #3742fa;
-                border-color: #4f69ff;
-            }
-            QCheckBox::indicator:checked::after {
-                content: "✓";
-                color: white;
-                font-size: 14px;
-                font-weight: bold;
-            }
-        """)
-        
-        # Set current selection
-        current_tv_mode = current_settings.get('keep_fullscreen_tv', False)
-        self.tv_checkbox.setChecked(current_tv_mode)
-        
-        tv_layout.addWidget(self.tv_checkbox)
-        
-        # TV help text
-        tv_help = QLabel("Force fullscreen every minute (for TV displays)")
-        tv_help.setStyleSheet("color: #888888; font-size: 12px;")
-        tv_layout.addWidget(tv_help)
-        
-        form_layout.addRow("TV Display Mode:", tv_widget)
         layout.addLayout(form_layout)
         
         # CSV Operations Section
@@ -1726,20 +1596,6 @@ class AlertDisplay(QWidget):
     def load_settings(self):
         """Load settings from settings.json"""
         try:
-            # Try app_data/settings.json first (preferred location)
-            settings_path = os.path.join(os.path.dirname(__file__), 'app_data', 'settings.json')
-            if os.path.exists(settings_path):
-                with open(settings_path, 'r', encoding='utf-8') as f:
-                    settings = json.load(f)
-                    # Ensure we have default values for missing keys
-                    return {
-                        'username': settings.get('username', ''),
-                        'data_folder': settings.get('data_folder', ''),
-                        'alarm_monitor': settings.get('alarm_monitor', 0),
-                        'keep_fullscreen_tv': settings.get('keep_fullscreen_tv', False)
-                    }
-            
-            # Fallback to root settings.json
             settings_path = os.path.join(os.path.dirname(__file__), 'settings.json')
             if os.path.exists(settings_path):
                 with open(settings_path, 'r', encoding='utf-8') as f:
@@ -1747,13 +1603,11 @@ class AlertDisplay(QWidget):
                     # Ensure we have default values for missing keys
                     return {
                         'username': settings.get('username', ''),
-                        'data_folder': settings.get('data_folder', ''),
-                        'alarm_monitor': settings.get('alarm_monitor', 0),
-                        'keep_fullscreen_tv': settings.get('keep_fullscreen_tv', False)
+                        'data_folder': settings.get('data_folder', '')
                     }
         except Exception:
             pass
-        return {'username': '', 'data_folder': '', 'alarm_monitor': 0, 'keep_fullscreen_tv': False}
+        return {'username': '', 'data_folder': ''}
     
     def save_settings_and_close(self, dialog, original_settings):
         """Save settings with validation and preserve existing values"""
@@ -1771,36 +1625,17 @@ class AlertDisplay(QWidget):
             # Preserve existing values if new ones are empty (except for intentional clearing)
             final_username = new_username if new_username else original_settings.get('username', '')
             final_folder = new_folder  # Allow empty folder (uses defaults)
-            final_monitor = self.monitor_combo.currentData() if hasattr(self, 'monitor_combo') else original_settings.get('alarm_monitor', 0)
-            final_tv_mode = self.tv_checkbox.isChecked() if hasattr(self, 'tv_checkbox') else original_settings.get('keep_fullscreen_tv', False)
+            final_monitor = self.monitor_combo.currentData() if hasattr(self, 'monitor_combo') else 0
             
             settings = {
                 'username': final_username,
                 'data_folder': final_folder,
-                'alarm_monitor': final_monitor,
-                'keep_fullscreen_tv': final_tv_mode
+                'alarm_monitor': final_monitor
             }
             
-            # Save to app_data/settings.json (preferred location)
-            settings_path = os.path.join(os.path.dirname(__file__), 'app_data', 'settings.json')
-            
-            # Ensure app_data directory exists
-            os.makedirs(os.path.dirname(settings_path), exist_ok=True)
-            
+            settings_path = os.path.join(os.path.dirname(__file__), 'settings.json')
             with open(settings_path, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=2)
-            
-            # Handle TV mode changes
-            if final_tv_mode:
-                self.start_tv_fullscreen_timer()
-            else:
-                self.stop_tv_fullscreen_timer()
-            
-            # If alarm monitor changed and we have an active alert, move immediately
-            old_monitor = original_settings.get('alarm_monitor', 0)
-            if final_monitor != old_monitor and self.alert_active:
-                print(f"DEBUG: Monitor setting changed during active alarm, switching immediately")
-                self.ensure_alarm_on_correct_monitor()
             
             QMessageBox.information(self, "Settings", "Settings saved successfully!")
             dialog.accept()
@@ -1826,9 +1661,6 @@ class AlertDisplay(QWidget):
         if self.pause_timer:
             self.pause_timer.stop()
             self.pause_timer = None
-        if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
-            self.tv_fullscreen_timer.stop()
-            self.tv_fullscreen_timer = None
         
         # Clean up status cards
         for card in self.status_cards.values():
