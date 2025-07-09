@@ -679,12 +679,16 @@ class AlertDisplay(QWidget):
             getattr(self, 'alert_active', False)):
             # Wait 500ms before restarting to ensure clean playback (3-second file needs breathing room)
             QTimer.singleShot(500, self.restart_alarm_audio)
+        elif status == QMediaPlayer.MediaStatus.InvalidMedia:
+            # Reset flag if media becomes invalid
+            self.alarm_sound_playing = False
 
     def restart_alarm_audio(self):
         """Restart alarm audio if still in alarm mode"""
         if (getattr(self, 'alarm_sound_playing', False) and 
             getattr(self, 'alert_active', False) and
-            self.alert_sound):
+            self.alert_sound and
+            self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
             # Stop and restart for cleaner playback
             self.alert_sound.stop()
             # Small delay to ensure stop completes
@@ -824,11 +828,13 @@ class AlertDisplay(QWidget):
                     import random
                     flash_interval = random.randint(100, 500)  # 10Hz to 2Hz
                     self.flash_timer.start(flash_interval)
-                    
-                    # Start continuous alarm sound when alarm starts
-                    if self.alert_sound and not getattr(self, 'alarm_sound_playing', False):
-                        self.alarm_sound_playing = True
-                        self.alert_sound.play()  # Will loop automatically via media status handler
+                
+                # Start continuous alarm sound when alarm starts - improved protection
+                if (self.alert_sound and 
+                    not getattr(self, 'alarm_sound_playing', False) and
+                    self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
+                    self.alarm_sound_playing = True
+                    self.alert_sound.play()  # Will loop automatically via media status handler
             else:
                 # Stop all flashing and sound when alert is cleared
                 self.stop_all_alarms()
