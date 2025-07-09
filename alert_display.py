@@ -508,6 +508,20 @@ class AlertDisplay(QWidget):
         title_label.setStyleSheet("color: #ffffff; padding: 0px;")  # Removed bottom padding
         header_layout.addWidget(title_label)
         
+        # Status summary bar moved into header
+        self.summary_label = QLabel("SYSTEM NOMINAL")
+        self.summary_label.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))  # Increased from 22 to 26 for better visibility in header
+        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.summary_label.setStyleSheet("""
+            background-color: #2ed573;
+            color: #000000;
+            padding: 8px 20px;  /* Adjusted padding for header position */
+            border-radius: 8px;
+            margin-left: 20px;  /* Only left margin for separation from title */
+        """)
+        header_layout.addWidget(self.summary_label)
+        
+        # Add stretch to push buttons and clock to the right - but smaller stretch for symmetrical padding
         header_layout.addStretch()
         
         # Multi-monitor button
@@ -605,19 +619,6 @@ class AlertDisplay(QWidget):
         header_layout.addWidget(self.clock_label)
         
         main_layout.addLayout(header_layout)
-        
-        # Status summary bar
-        self.summary_label = QLabel("SYSTEM NOMINAL")
-        self.summary_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))  # Increased from 18 to 22
-        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.summary_label.setStyleSheet("""
-            background-color: #2ed573;
-            color: #000000;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 3px;  /* Reduced from 10px to 3px (70% reduction) */
-        """)
-        main_layout.addWidget(self.summary_label)
         
         # Scrollable cards area
         scroll_area = QScrollArea()
@@ -1311,9 +1312,9 @@ class AlertDisplay(QWidget):
         self.summary_label.setStyleSheet(f"""
             background-color: {color};
             color: {text_color};
-            padding: 12px;
+            padding: 8px 20px;  /* Adjusted padding for header position */
             border-radius: 8px;
-            margin-bottom: 10px;
+            margin-left: 20px;  /* Only left margin for separation from title */
         """)
     
     def get_ack_path(self):
