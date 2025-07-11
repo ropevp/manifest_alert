@@ -1,49 +1,44 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon
-from alert_display import AlertDisplay
 import os
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtCore import Qt
+from alert_display import AlertDisplay
 
 if __name__ == "__main__":
+    # Hide console window in production (when run with pythonw.exe)
+    try:
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+    except:
+        pass  # Ignore if not on Windows or if console is already hidden
+    
+    # Suppress Qt debug output for cleaner production experience
+    os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg.debug=false'
+    
     app = QApplication(sys.argv)
+    
+    # Set application properties for better Windows integration
+    app.setApplicationName("Manifest Alerts")
+    app.setApplicationVersion("1.0")
+    app.setOrganizationName("Warehouse Systems")
+    
+    # Set application icon for taskbar display
+    icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+    
+    # Windows-specific: Set application ID to avoid Python grouping in taskbar
+    try:
+        import ctypes
+        # Set a unique AppUserModelID for Windows taskbar grouping
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('WarehouseSystems.ManifestAlerts.1.0')
+    except:
+        pass  # Ignore if not on Windows or if ctypes fails
+    
+    app.setQuitOnLastWindowClosed(False)
     window = AlertDisplay()
+    window.setWindowState(window.windowState() | Qt.WindowState.WindowMaximized)
     window.show()
 
-    # System tray icon setup
-    icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'icon.ico')
-    tray_icon = QSystemTrayIcon(QIcon(icon_path) if os.path.exists(icon_path) else window.windowIcon(), parent=app)
-    tray_icon.setToolTip("Manifest Alerts")
-
-    # Tray menu
-    menu = QMenu()
-    show_action = QAction("Show/Hide Window")
-    exit_action = QAction("Exit")
-    menu.addAction(show_action)
-    menu.addSeparator()
-    menu.addAction(exit_action)
-    tray_icon.setContextMenu(menu)
-
-    def toggle_window():
-        if window.isVisible():
-            window.hide()
-        else:
-            window.show()
-            window.raise_()
-            window.activateWindow()
-
-    def exit_app():
-        tray_icon.hide()
-        app.quit()
-
-    show_action.triggered.connect(toggle_window)
-    exit_action.triggered.connect(exit_app)
-    tray_icon.activated.connect(lambda reason: toggle_window() if reason == QSystemTrayIcon.Trigger else None)
-    tray_icon.show()
-
-    # Minimize to tray on close
-    def closeEvent(event):
-        event.ignore()
-        window.hide()
-    window.closeEvent = closeEvent
-
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

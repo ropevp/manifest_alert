@@ -1,0 +1,25 @@
+# Ticket: Improve UI for Message Bar and Card Spacing
+
+## Description
+The message bar at the top of the application needs to work better, ensuring clear visibility and proper alignment. Additionally, the spacing in the cards should be adjusted to allow text to fit within 4 lines without being clipped.
+
+## Changes Made
+1. **Message Bar Improvements**:
+   - Updated the `summary_label` in the `setup_ui` method of the `AlertDisplay` class.
+   - Adjusted the font size to ensure better readability.
+   - Modified the padding and border-radius for a cleaner appearance.
+
+2. **Card Spacing Adjustments**:
+   - Reduced spacing between sections in the `setup_ui` method of the `StatusCard` class.
+   - Adjusted the margins and spacing in the `carriers_layout` to prevent text clipping.
+   - Ensured the acknowledgment details fit within 4 lines by reducing font size and increasing spacing.
+
+## Files Modified
+- `alert_display.py`
+
+## Testing
+- Verified that the message bar displays correctly with the updated styling.
+- Tested various card layouts to ensure text fits within 4 lines without clipping.
+
+## Notes
+Further testing may be required to ensure compatibility across different screen resolutions and font scaling settings.

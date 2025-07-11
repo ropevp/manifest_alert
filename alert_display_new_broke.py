@@ -119,9 +119,9 @@ class StatusCard(QFrame):
         # Left part: carriers (will be recreated as clickable labels)
         self.carriers_widget = QWidget()
         self.carriers_layout = QVBoxLayout(self.carriers_widget)
-        self.carriers_layout.setContentsMargins(0, 0, 0, 0)
-        self.carriers_layout.setSpacing(1)  # Extremely tight - reduced from 2 to 1
-        carriers_ack_layout.addWidget(self.carriers_widget)
+        self.carriers_layout.setContentsMargins(0, 4, 0, 4)  # Add top/bottom margin for vertical centering
+        self.carriers_layout.setSpacing(2)  # Slightly increased spacing for readability
+        carriers_ack_layout.addWidget(self.carriers_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
         
         # Right part: acknowledgment (consistent fixed width)
         ack_widget = QWidget()
@@ -270,45 +270,46 @@ class StatusCard(QFrame):
             for carrier, status in self.manifests:
                 # Create individual carrier label
                 carrier_label = QLabel()
-                carrier_label.setFont(QFont("Segoe UI", 22))  # Increased from 18 to 22
-                carrier_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-                # No padding at all for minimal line height
-                
+                carrier_label.setFont(QFont("Segoe UI", 22))
+                carrier_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                # Add bottom padding to prevent descender clipping
+                carrier_label.setStyleSheet("padding-bottom: 4px;")
+
                 # Set text and styling based on status (clean display)
                 if status == "Acknowledged":
                     carrier_label.setText(carrier)
-                    carrier_label.setStyleSheet("color: #2ed573; background: transparent;")
+                    carrier_label.setStyleSheet("color: #2ed573; background: transparent; padding-bottom: 4px;")
                 elif status == "AcknowledgedLate":
                     carrier_label.setText(carrier)
-                    carrier_label.setStyleSheet("color: #ffb347; background: transparent;")
+                    carrier_label.setStyleSheet("color: #ffb347; background: transparent; padding-bottom: 4px;")
                 elif status == "Active":
                     carrier_label.setText(carrier)
-                    carrier_label.setStyleSheet("color: #ffffff; background: transparent; border-radius: 5px;")
+                    carrier_label.setStyleSheet("color: #ffffff; background: transparent; border-radius: 5px; padding-bottom: 4px;")
                     # Make active items clickable and hoverable
                     carrier_label.mousePressEvent = lambda event, c=carrier: self.acknowledge_single_carrier(c)
                     carrier_label.enterEvent = lambda event, label=carrier_label: self.carrier_hover_enter(label, "#ff4757")
                     carrier_label.leaveEvent = lambda event, label=carrier_label: self.carrier_hover_leave(label)
                 elif status == "Missed":
                     carrier_label.setText(carrier)
-                    carrier_label.setStyleSheet("color: #ff4757; background: transparent; border-radius: 5px;")
+                    carrier_label.setStyleSheet("color: #ff4757; background: transparent; border-radius: 5px; padding-bottom: 4px;")
                     # Make missed items clickable and hoverable
                     carrier_label.mousePressEvent = lambda event, c=carrier: self.acknowledge_single_carrier(c)
                     carrier_label.enterEvent = lambda event, label=carrier_label: self.carrier_hover_enter(label, "#c44569")
                     carrier_label.leaveEvent = lambda event, label=carrier_label: self.carrier_hover_leave(label)
                 else:  # Open
                     carrier_label.setText(carrier)
-                    carrier_label.setStyleSheet("color: #ffffff; background: transparent;")
-                
+                    carrier_label.setStyleSheet("color: #ffffff; background: transparent; padding-bottom: 4px;")
+
                 self.carriers_layout.addWidget(carrier_label)
-            
-            # Extremely compact height calculation for minimal vertical space
+
+            # Adjusted height calculation for better fit and no clipping
             line_count = len(self.manifests)
-            base_height = 35       # Even smaller base height
-            line_height = 22       # Tight but readable height per carrier line  
-            padding = 10           # Minimal padding
+            base_height = 38       # Slightly increased base height
+            line_height = 28       # Increased line height for more breathing room
+            padding = 14           # Increased padding
             new_height = base_height + (line_count * line_height) + padding
-            self.setFixedHeight(new_height)  # Use fixed height for consistent appearance
-            
+            self.setFixedHeight(new_height)
+
             # Update overall card status
             self.update_card_status()
     
@@ -501,15 +502,30 @@ class AlertDisplay(QWidget):
         
         # Header section
         header_layout = QHBoxLayout()
-        
+
         # Title
         title_label = QLabel("MANIFEST TIMES")
-        title_label.setFont(QFont("Segoe UI", 42, QFont.Weight.Bold))  # Increased from 36 to 42
-        title_label.setStyleSheet("color: #ffffff; padding: 0px;")  # Removed bottom padding
+        title_label.setFont(QFont("Segoe UI", 42, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: #ffffff; padding: 0px;")
         header_layout.addWidget(title_label)
-        
+
+        # Message/Summary bar (moved into header)
+        self.summary_label = QLabel("SYSTEM NOMINAL")
+        self.summary_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.summary_label.setStyleSheet("""
+            background-color: #2ed573;
+            color: #000000;
+            padding: 12px;
+            border-radius: 8px;
+            margin-left: 18px;
+            margin-right: 18px;
+        """)
+        self.summary_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        header_layout.addWidget(self.summary_label, stretch=1)
+
         header_layout.addStretch()
-        
+
         # Multi-monitor button
         self.monitor_btn = QPushButton("🖥️")
         self.monitor_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
@@ -531,7 +547,7 @@ class AlertDisplay(QWidget):
         """)
         self.monitor_btn.clicked.connect(self.show_monitor_menu)
         header_layout.addWidget(self.monitor_btn)
-        
+
         # Fullscreen button
         self.fullscreen_btn = QPushButton("⛶")
         self.fullscreen_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
@@ -553,7 +569,7 @@ class AlertDisplay(QWidget):
         """)
         self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
         header_layout.addWidget(self.fullscreen_btn)
-        
+
         # Settings button with cog icon
         self.settings_btn = QPushButton("⚙️")
         self.settings_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
@@ -575,7 +591,7 @@ class AlertDisplay(QWidget):
         """)
         self.settings_btn.clicked.connect(self.show_settings_dialog)
         header_layout.addWidget(self.settings_btn)
-        
+
         # Refresh Data button in header with refresh icon
         self.reload_btn = QPushButton("🔄")
         self.reload_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
@@ -597,27 +613,14 @@ class AlertDisplay(QWidget):
         """)
         self.reload_btn.clicked.connect(self.populate_data)
         header_layout.addWidget(self.reload_btn)
-        
+
         # Clock - DS-Digital font for 7-segment display look
         self.clock_label = QLabel()
-        self.clock_label.setFont(QFont("DS-Digital", 42, QFont.Weight.Bold))  # Increased to match MANIFEST TIMES header
-        self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px; text-shadow: 0px 0px 5px #B8860B;")  # Golden yellow with subtle glow
+        self.clock_label.setFont(QFont("DS-Digital", 42, QFont.Weight.Bold))
+        self.clock_label.setStyleSheet("color: #FFD700; padding: 0px; margin-left: 20px; text-shadow: 0px 0px 5px #B8860B;")
         header_layout.addWidget(self.clock_label)
-        
+
         main_layout.addLayout(header_layout)
-        
-        # Status summary bar
-        self.summary_label = QLabel("SYSTEM NOMINAL")
-        self.summary_label.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))  # Increased from 18 to 22
-        self.summary_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.summary_label.setStyleSheet("""
-            background-color: #2ed573;
-            color: #000000;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 3px;  /* Reduced from 10px to 3px (70% reduction) */
-        """)
-        main_layout.addWidget(self.summary_label)
         
         # Scrollable cards area
         scroll_area = QScrollArea()
@@ -663,15 +666,17 @@ class AlertDisplay(QWidget):
                 self.alert_sound.setAudioOutput(self.audio_output)
                 self.alert_sound.setSource(QUrl.fromLocalFile(sound_path))
                 self.audio_output.setVolume(0.7)  # 70% volume
-                
+
                 # Set up looping - when playback finishes, restart if still in alarm mode
                 self.alert_sound.mediaStatusChanged.connect(self.on_media_status_changed)
             else:
                 self.alert_sound = None
                 self.audio_output = None
-        except Exception:
+                print("WARNING: Alert sound file not found.")
+        except Exception as e:
             self.alert_sound = None
             self.audio_output = None
+            print(f"ERROR: Failed to initialize sound. Exception: {e}")
 
     def on_media_status_changed(self, status):
         """Handle media status changes to implement looping during alarm mode"""
@@ -689,14 +694,17 @@ class AlertDisplay(QWidget):
 
     def restart_alarm_audio(self):
         """Restart alarm audio if still in alarm mode"""
-        if (getattr(self, 'alarm_sound_playing', False) and 
-            getattr(self, 'alert_active', False) and
-            self.alert_sound and
-            self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
-            # Stop and restart for cleaner playback
-            self.alert_sound.stop()
-            # Small delay to ensure stop completes
-            QTimer.singleShot(100, lambda: self.alert_sound.play() if self.alert_sound else None)
+        try:
+            if (getattr(self, 'alarm_sound_playing', False) and 
+                getattr(self, 'alert_active', False) and
+                self.alert_sound and
+                self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
+                # Stop and restart for cleaner playback
+                self.alert_sound.stop()
+                # Small delay to ensure stop completes
+                QTimer.singleShot(100, lambda: self.alert_sound.play() if self.alert_sound else None)
+        except Exception as e:
+            print(f"ERROR: Failed to restart alarm audio. Exception: {e}")
 
     def changeEvent(self, event):
         """Handle window state changes to update fullscreen icon"""
@@ -861,31 +869,34 @@ class AlertDisplay(QWidget):
     
     def stop_all_alarms(self):
         """Stop all alarm timers and reset state"""
-        # Stop all timers
-        if self.flash_timer and self.flash_timer.isActive():
-            self.flash_timer.stop()
-        if self.pause_timer and self.pause_timer.isActive():
-            self.pause_timer.stop()
-            
-        # Reset all alarm state
-        self.flash_state = False
-        self.is_paused = False
-        self.alarm_sound_playing = False
-        
-        # Stop sound if playing
-        if self.alert_sound:
-            self.alert_sound.stop()
-        
-        # DO NOT restore window state when alerts end - let user control window state
-        # Only clean up alarm state tracking without changing window
-        if hasattr(self, 'alarm_previous_state'):
-            delattr(self, 'alarm_previous_state')
-        if hasattr(self, 'alarm_previous_geometry'):
-            delattr(self, 'alarm_previous_geometry')
-            
-        # Ensure normal background
-        self.apply_background_style()
-    
+        try:
+            # Stop all timers
+            if self.flash_timer and self.flash_timer.isActive():
+                self.flash_timer.stop()
+            if self.pause_timer and self.pause_timer.isActive():
+                self.pause_timer.stop()
+
+            # Reset all alarm state
+            self.flash_state = False
+            self.is_paused = False
+            self.alarm_sound_playing = False
+
+            # Stop sound if playing
+            if self.alert_sound:
+                self.alert_sound.stop()
+
+            # DO NOT restore window state when alerts end - let user control window state
+            # Only clean up alarm state tracking without changing window
+            if hasattr(self, 'alarm_previous_state'):
+                delattr(self, 'alarm_previous_state')
+            if hasattr(self, 'alarm_previous_geometry'):
+                delattr(self, 'alarm_previous_geometry')
+
+            # Ensure normal background
+            self.apply_background_style()
+        except Exception as e:
+            print(f"ERROR: Failed to stop alarms. Exception: {e}")
+
     def start_tv_fullscreen_timer(self):
         """Start the TV fullscreen timer (60 seconds interval)"""
         if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
@@ -1157,110 +1168,114 @@ class AlertDisplay(QWidget):
     
     def populate_data(self):
         """Populate cards with manifest data"""
-        # Clear existing cards
-        for card in self.status_cards.values():
-            card.setParent(None)
-        self.status_cards.clear()
-        
-        # Load configuration
-        config = self.load_config()
-        manifests = config.get('manifests', [])
-        
-        if not manifests:
-            # Show "no data" message
-            no_data_label = QLabel("NO MANIFEST DATA AVAILABLE")
-            no_data_label.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-            no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            no_data_label.setStyleSheet("color: #ff4757; padding: 100px;")
-            self.cards_layout.addWidget(no_data_label, 0, 0)
-            self.update_summary("NO DATA")
-            return
-        
-        # Sort manifests by time
-        manifests = sorted(manifests, key=lambda m: m['time'])
-        
-        # Load acknowledgments
-        acks = self.load_acknowledgments()
-        
-        now = datetime.now()
-        today = now.date().isoformat()
-        
-        # Create status cards - one per row
-        row = 0
-        cols_per_row = 1  # One card per row for wider layout
-        
-        active_count = 0
-        missed_count = 0
-        open_count = 0
-        acked_count = 0
-        
-        for manifest in manifests:
-            time_str = manifest['time']
-            
-            # Create status card with parent reference
-            card = StatusCard(time_str, parent_display=self)
-            self.status_cards[time_str] = card
-            
-            # Process carriers for this time - determine overall time slot status first
-            manifest_data = []
-            time_slot_status = get_manifest_status(time_str, now)
-            # Processing time slot for acknowledgment check
-            
-            for carrier in manifest.get('carriers', []):
-                ack_key = f"{today}_{time_str}_{carrier}"
-                is_acked = ack_key in acks
-                # Check acknowledgment status for active/missed items
-                
-                if is_acked:
-                    # Check if it was a late acknowledgment
-                    ack_info = acks[ack_key]
-                    reason = ack_info.get('reason', '')
-                    if reason and reason.strip():  # Has reason = late acknowledgment
-                        status = "AcknowledgedLate"
+        try:
+            # Clear existing cards
+            for card in self.status_cards.values():
+                card.setParent(None)
+            self.status_cards.clear()
+
+            # Load configuration
+            config = self.load_config()
+            manifests = config.get('manifests', [])
+
+            if not manifests:
+                # Show "no data" message
+                no_data_label = QLabel("NO MANIFEST DATA AVAILABLE")
+                no_data_label.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
+                no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                no_data_label.setStyleSheet("color: #ff4757; padding: 100px;")
+                self.cards_layout.addWidget(no_data_label, 0, 0)
+                self.update_summary("NO DATA")
+                return
+
+            # Sort manifests by time
+            manifests = sorted(manifests, key=lambda m: m['time'])
+
+            # Load acknowledgments
+            acks = self.load_acknowledgments()
+
+            now = datetime.now()
+            today = now.date().isoformat()
+
+            # Create status cards - one per row
+            row = 0
+            cols_per_row = 1  # One card per row for wider layout
+
+            active_count = 0
+            missed_count = 0
+            open_count = 0
+            acked_count = 0
+
+            for manifest in manifests:
+                time_str = manifest['time']
+
+                # Create status card with parent reference
+                card = StatusCard(time_str, parent_display=self)
+                self.status_cards[time_str] = card
+
+                # Process carriers for this time - determine overall time slot status first
+                manifest_data = []
+                time_slot_status = get_manifest_status(time_str, now)
+                # Processing time slot for acknowledgment check
+
+                for carrier in manifest.get('carriers', []):
+                    ack_key = f"{today}_{time_str}_{carrier}"
+                    is_acked = ack_key in acks
+                    # Check acknowledgment status for active/missed items
+
+                    if is_acked:
+                        # Check if it was a late acknowledgment
+                        ack_info = acks[ack_key]
+                        reason = ack_info.get('reason', '')
+                        if reason and reason.strip():  # Has reason = late acknowledgment
+                            status = "AcknowledgedLate"
+                        else:
+                            status = "Acknowledged"
+                        acked_count += 1
+
+                        # Set acknowledgment display
+                        user_name = ack_info.get('user', 'Unknown')
+                        card.set_acknowledgment(user_name, reason if reason else None)
                     else:
-                        status = "Acknowledged"
-                    acked_count += 1
-                    
-                    # Set acknowledgment display
-                    user_name = ack_info.get('user', 'Unknown')
-                    card.set_acknowledgment(user_name, reason if reason else None)
-                else:
-                    # Use the time slot status for all non-acknowledged items
-                    status = time_slot_status
-                    if status == "Active":
-                        active_count += 1
-                    elif status == "Missed":
-                        missed_count += 1
-                    else:
-                        open_count += 1
-                
-                manifest_data.append((carrier, status))
-            
-            card.set_manifests(manifest_data)
-            
-            # Add to grid - one per row
-            self.cards_layout.addWidget(card, row, 0)
-            row += 1
-        
-        # Update alert state
-        self.alert_active = (active_count > 0 or missed_count > 0)
-        
-        # Update refresh timer interval based on alert state
-        self.update_refresh_timer()
-        
-        # Update flash timer based on alert state
-        self.update_flash_timer()
-        
-        # Update summary with next manifest countdown
-        next_manifest_info = self.get_next_manifest_info(manifests, now)
-        if active_count > 0:
-            self.update_summary("ACTIVE ALERTS", "#ff4757")
-        elif missed_count > 0:
-            self.update_summary("MISSED MANIFESTS", "#c44569")
-        elif next_manifest_info:
-            self.update_summary(next_manifest_info, "#3742fa")
-        else:
-            self.update_summary("ALL SYSTEMS NOMINAL", "#2ed573")
+                        # Use the time slot status for all non-acknowledged items
+                        status = time_slot_status
+                        if status == "Active":
+                            active_count += 1
+                        elif status == "Missed":
+                            missed_count += 1
+                        else:
+                            open_count += 1
+
+                    manifest_data.append((carrier, status))
+
+                card.set_manifests(manifest_data)
+
+                # Add to grid - one per row
+                self.cards_layout.addWidget(card, row, 0)
+                row += 1
+
+            # Update alert state
+            self.alert_active = (active_count > 0 or missed_count > 0)
+
+            # Update refresh timer interval based on alert state
+            self.update_refresh_timer()
+
+            # Update flash timer based on alert state
+            self.update_flash_timer()
+
+            # Update summary with next manifest countdown
+            next_manifest_info = self.get_next_manifest_info(manifests, now)
+            if active_count > 0:
+                self.update_summary("ACTIVE ALERTS", "#ff4757")
+            elif missed_count > 0:
+                self.update_summary("MISSED MANIFESTS", "#c44569")
+            elif next_manifest_info:
+                self.update_summary(next_manifest_info, "#3742fa")
+            else:
+                self.update_summary("ALL SYSTEMS NOMINAL", "#2ed573")
+        except Exception as e:
+            self.update_summary(f"ERROR: {str(e)}", "#ff4757")
+            print(f"Error during data population: {e}")
     
     def get_next_manifest_info(self, manifests, now):
         """Get countdown to next manifest"""
@@ -2447,11 +2462,3 @@ class AlertDisplay(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Import Error", f"Failed to import configuration:\n{str(e)}")
-
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = AlertDisplay()
-    window.show()
-    sys.exit(app.exec())

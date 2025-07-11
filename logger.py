@@ -3,7 +3,19 @@ import json
 from datetime import datetime
 
 def log_acknowledgment(manifest_time, carrier, status, reason=None):
-    log_path = os.path.join(os.path.dirname(__file__), 'logs', 'acknowledgments.json')
+    # Use configurable path from settings
+    from settings_manager import get_settings_manager
+    settings = get_settings_manager()
+    log_path = settings.get_acknowledgments_path()
+    
+    # Ensure logs directory exists
+    log_dir = os.path.dirname(log_path)
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Get effective acknowledgment name (custom name or Windows username)
+    settings = get_settings_manager()
+    username = settings.get_effective_ack_name()
+    
     today = datetime.now().date().isoformat()
     entry = {
         'timestamp': datetime.now().isoformat(timespec='seconds'),
@@ -11,6 +23,7 @@ def log_acknowledgment(manifest_time, carrier, status, reason=None):
         'manifest_time': manifest_time,
         'carrier': carrier,
         'status': status,
+        'acknowledged_by': username,
     }
     if reason:
         entry['reason'] = reason
