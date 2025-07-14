@@ -28,7 +28,10 @@ try:
     from settings_manager import get_settings_manager
 except ImportError:
     # Fallback if imports fail - should not happen in production
-    print("WARNING: Failed to import core modules, using minimal fallback")
+    try:
+        print("WARNING: Failed to import core modules, using minimal fallback")
+    except:
+        pass  # Ignore console output errors
     
     def get_manifest_status(time_str, now):
         # Emergency fallback - try basic time comparison
@@ -929,7 +932,10 @@ class AlertDisplay(QWidget):
                     return  # Already on correct monitor
             
             # Need to move to correct monitor
-            print(f"DEBUG: Moving alarm to monitor {target_monitor}")
+            try:
+                print(f"DEBUG: Moving alarm to monitor {target_monitor}")
+            except:
+                pass  # Ignore console output errors
             
             # Exit fullscreen for repositioning
             if self.isFullScreen():
@@ -957,7 +963,10 @@ class AlertDisplay(QWidget):
             QTimer.singleShot(100, self.showFullScreen)
             
         except Exception as e:
-            print(f"DEBUG: Error in ensure_alarm_on_correct_monitor: {e}")
+            try:
+                print(f"DEBUG: Error in ensure_alarm_on_correct_monitor: {e}")
+            except:
+                pass  # Ignore console output errors
     
     def force_tv_fullscreen(self):
         """Force the display to fullscreen (for TV mode) - improved logic"""
@@ -1803,7 +1812,10 @@ class AlertDisplay(QWidget):
             # If alarm monitor changed and we have an active alert, move immediately
             old_monitor = original_settings.get('alarm_monitor', 0)
             if final_monitor != old_monitor and self.alert_active:
-                print(f"DEBUG: Monitor setting changed during active alarm, switching immediately")
+                try:
+                    print(f"DEBUG: Monitor setting changed during active alarm, switching immediately")
+                except:
+                    pass  # Ignore console output errors
                 self.ensure_alarm_on_correct_monitor()
             
             QMessageBox.information(self, "Settings", "Settings saved successfully!")
@@ -2109,7 +2121,10 @@ class AlertDisplay(QWidget):
                 self.update_fullscreen_icon()
                     
         except Exception as e:
-            print(f"Error moving to monitor {monitor_index}: {e}")
+            try:
+                print(f"Error moving to monitor {monitor_index}: {e}")
+            except:
+                pass  # Ignore console output errors
     
     def export_to_csv(self):
         """Export acknowledgment data to CSV file (deprecated - use export_to_csv_from_settings)"""
@@ -2363,7 +2378,10 @@ class AlertDisplay(QWidget):
             return True
             
         except Exception as e:
-            print(f"Backup creation failed: {e}")
+            try:
+                print(f"Backup creation failed: {e}")
+            except:
+                pass  # Ignore console output errors
             return False
     
     def import_config_from_csv(self):
