@@ -97,7 +97,7 @@ if exist "data\config.json" (
 echo.
 echo [2/4] Downloading latest version...
 git fetch origin
-git reset --hard origin/3.00
+git reset --hard origin/main
 if %errorlevel% neq 0 (
     echo ERROR: Failed to download updates
     echo Check your internet connection and try again

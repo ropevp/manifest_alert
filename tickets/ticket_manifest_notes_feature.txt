@@ -1,0 +1,158 @@
+TICKET: Manifest Notes/Reasons Feature Implementation
+==================================================
+
+OVERVIEW:
+Add a reasons/notes system allowing users to add context when acknowledging alerts,
+with predefined options and ability to add custom reasons.
+
+REQUIREMENTS:
+1. New JSON file: reasons.json in shared folder (\\Prddpkmitlgt004\ManifestPC\)
+2. Popup dialog for reason selection
+3. UI updates to display reasons next to carriers
+4. Two interaction scenarios: missed alert acknowledgment and historical editing
+
+IMPLEMENTATION STEPS:
+
+1. CREATE REASONS.JSON FILE
+   - Location: \\Prddpkmitlgt004\ManifestPC\reasons.json
+   - Structure: 
+     {
+       "reasons": [
+         "Truck Arrived Late",
+         "Manifest Cancelled", 
+         "Reason 3",
+         "Reason 4",
+         "Reason 5"
+       ]
+     }
+
+2. CREATE REASON SELECTION POPUP
+   - Modal dialog with list of predefined reasons
+   - Hover effects for selection (optional - only implement if simple in PyQt6)
+   - Add "NEW" reason field at bottom (editable text field)
+   - Enter key in text field saves new reason to reasons.json and adds to list
+   - User can select existing reason or add new one
+   - Popup appears when acknowledging missed alerts OR editing historical reasons
+
+3. UPDATE ACKNOWLEDGMENT FLOW (Scenario A)
+   - When user clicks on missed alert (Done/Done Late), show reason popup
+   - User selects reason from popup OR adds new reason
+   - Save reason to ack.json along with existing acknowledgment data
+   - Update UI immediately to show reason in light blue next to carrier
+   - If user cancels popup (ESC, Cancel, or click outside), acknowledgment still saves but without reason
+
+4. UPDATE ACKNOWLEDGMENTS.JSON STRUCTURE
+   - Current structure already supports individual carrier acknowledgments
+   - Each carrier acknowledgment is stored as separate JSON object with:
+     - date, manifest_time, carrier, user, reason, timestamp
+   - ENHANCED: Support multiple timestamped reasons for same carrier
+   - Example from existing ack.json with multiple reasons:
+     {
+       "date": "2025-07-15",
+       "manifest_time": "13:45", 
+       "carrier": "DHL Express",
+       "user": "Rohan",
+       "reason": "Manifest Not Working - 14:02:55",
+       "reason_history": [
+         {
+           "reason": "Manifest Not Working",
+           "timestamp": "2025-07-15T14:02:55.290611",
+           "user": "Rohan"
+         },
+         {
+           "reason": "Manifest Done",
+           "timestamp": "2025-07-15T14:47:23.123456",
+           "user": "Rohan"
+         }
+       ],
+       "timestamp": "2025-07-15T14:47:23.123456"
+     }
+   - Main "reason" field shows latest reason with timestamp
+   - "reason_history" array stores chronological sequence of all reasons
+
+5. UPDATE UI DISPLAY
+   - Show reason in light blue text next to carrier labels
+   - Align reasons starting from vertical line (as shown in mockup) (if mockup not available - then use 740 pixels from left of full screen else)
+   - Format: "Carrier Name    Latest Reason - HH:MM" (light blue)
+   - MULTIPLE REASONS DISPLAY: Show latest reason with timestamp
+   - On hover/click, show full reason history in tooltip or expanded view
+   - IMPORTANT: Each carrier has individual acknowledgment data from ack.json
+   - Display "DONE by [user] at [time]" text per carrier, not per time group
+   - This allows individual carriers within a time group to have different acknowledgment states
+   - Example: Within 13:45 time slot, "DHL Express" might show "Manifest Done - 14:47" 
+     while "NZ Post DPK International" remains unacknowledged
+   - Reason history example: "Manifest Not Working - 14:02" → "Manifest Done - 14:47"
+
+6. IMPLEMENT HISTORICAL EDITING (Scenario B)
+   - Right-click on existing Done/Done Late carriers
+   - Show context menu with "Edit Reason" or "Add Reason" option
+   - Open same reason selection popup as Scenario A
+   - NEW: Add timestamp to new reason entry in reason_history array
+   - Update main "reason" field with latest reason + timestamp
+   - Refresh UI immediately to show updated reason
+   - Allow multiple edits over time to build reason history
+
+7. UI COMPONENT UPDATES
+   Files to modify:
+   - alert_display.py: Add reason display logic, popup dialog
+   - data_manager.py: Add reasons.json loading/saving functions
+   - Add new ReasonDialog class for popup interface
+
+8. POPUP DIALOG SPECIFICATIONS
+   - Modal dialog, centered on screen
+   - List of clickable reason options from reasons.json
+   - Hover effects for visual feedback (optional)
+   - Text input field at bottom labeled "NEW:" for custom reasons
+   - "Cancel" and "OK" buttons
+   - Enter key in text field adds new reason to reasons.json and selects it
+   - OK button saves selected reason to ack.json with current timestamp
+   - Escape key, Cancel button, or clicking outside cancels without saving reason
+   - Dialog title: "Select Reason" or "Add Reason" depending on context
+   - NEW: Show existing reason history in dialog for reference (read-only)
+
+9. DATA PERSISTENCE
+   - Load reasons.json on app startup
+   - Save new reasons immediately when added via popup
+   - Update ack.json with reason field for each carrier acknowledgment
+   - Handle file I/O errors gracefully (network share access)
+   - Ensure backward compatibility with existing ack.json entries (reason field may be empty)
+
+10. TESTING REQUIREMENTS
+    - Test reason selection for missed alerts
+    - Test adding new custom reasons
+    - Test editing historical reasons (right-click)
+    - Test multiple timestamped reasons for same carrier
+    - Test UI display of latest reason with timestamp
+    - Test reason history display (hover/tooltip)
+    - Test chronological ordering of reason history
+    - Test network file operations (shared folder access)
+    - Test error handling for file operations
+
+11. REASON HISTORY FEATURES
+    - Support multiple reasons per carrier over time
+    - Display latest reason with timestamp in main UI
+    - Store complete chronological history in reason_history array
+    - Each reason entry includes: reason text, timestamp, user
+    - UI shows progression: "Manifest Not Working - 14:02" → "Manifest Done - 14:47"
+    - Optional: Hover/click to show full reason timeline
+
+TECHNICAL NOTES:
+- Use PyQt6 for popup dialog implementation
+- Maintain backward compatibility with existing ack.json structure
+- Handle concurrent access to shared JSON files (reasons.json and ack.json)
+- Ensure proper error handling for network file operations
+- Consider caching reasons for better performance
+- File locations: \\Prddpkmitlgt004\ManifestPC\ for both reasons.json and ack.json
+- Reason field in ack.json can be empty string "" if no reason selected
+- NEW: reason_history array maintains chronological order of all reasons
+- Timestamps in reason_history use ISO format: "2025-07-15T14:02:55.290611"
+- Main "reason" field shows latest reason with short timestamp for display
+
+MOCKUP REFERENCE:
+- Image 1: Shows reason display next to carriers (light blue text)
+- Image 2: Shows alignment starting from vertical line
+- Image 3: Shows popup dialog layout with selectable reasons
+
+PRIORITY: Medium
+ESTIMATED EFFORT: 2-3 days
+DEPENDENCIES: None (extends existing acknowledgment system)

@@ -366,17 +366,27 @@ class StatusCard(QFrame):
                             # Parse timestamp and format time
                             ack_time = datetime.fromisoformat(timestamp)
                             time_str = ack_time.strftime('%H:%M')
-                            if reason:  # Late acknowledgment
+                            
+                            # Check if acknowledgment was late (after 30 minutes)
+                            manifest_time = datetime.strptime(self.time_str, '%H:%M').replace(
+                                year=ack_time.year, month=ack_time.month, day=ack_time.day
+                            )
+                            deadline = manifest_time + timedelta(minutes=30)
+                            is_late = ack_time > deadline
+                            
+                            if is_late:
                                 self.set_acknowledgment(f"{user_name} at {time_str}", "late")
-                            else:  # Regular acknowledgment
+                            else:
                                 self.set_acknowledgment(f"{user_name} at {time_str}")
                         except:
-                            if reason:
+                            # Fallback: check if reason contains "Late" for backward compatibility
+                            if reason and "Late" in reason:
                                 self.set_acknowledgment(user_name, "late")
                             else:
                                 self.set_acknowledgment(user_name)
                     else:
-                        if reason:
+                        # Fallback: check if reason contains "Late" for backward compatibility
+                        if reason and "Late" in reason:
                             self.set_acknowledgment(user_name, "late")
                         else:
                             self.set_acknowledgment(user_name)
@@ -1223,8 +1233,24 @@ class AlertDisplay(QWidget):
                 if is_acked:
                     # Check if it was a late acknowledgment
                     ack_info = acks[ack_key]
-                    reason = ack_info.get('reason', '')
-                    if reason and reason.strip():  # Has reason = late acknowledgment
+                    timestamp = ack_info.get('timestamp', '')
+                    is_late = False
+                    
+                    if timestamp:
+                        try:
+                            # Parse timestamp and check if late (after 30 minutes)
+                            ack_time = datetime.fromisoformat(timestamp)
+                            manifest_time = datetime.strptime(time_str, '%H:%M').replace(
+                                year=ack_time.year, month=ack_time.month, day=ack_time.day
+                            )
+                            deadline = manifest_time + timedelta(minutes=30)
+                            is_late = ack_time > deadline
+                        except:
+                            # Fallback: check if reason contains "Late" for backward compatibility
+                            reason = ack_info.get('reason', '')
+                            is_late = reason and "Late" in reason
+                    
+                    if is_late:
                         status = "AcknowledgedLate"
                     else:
                         status = "Acknowledged"
@@ -1232,7 +1258,7 @@ class AlertDisplay(QWidget):
                     
                     # Set acknowledgment display
                     user_name = ack_info.get('user', 'Unknown')
-                    card.set_acknowledgment(user_name, reason if reason else None)
+                    card.set_acknowledgment(user_name, "late" if is_late else None)
                 else:
                     # Use the time slot status for all non-acknowledged items
                     status = time_slot_status
@@ -1909,13 +1935,13 @@ class AlertDisplay(QWidget):
                         break
                 
                 if not existing_ack:
-                    # Add new acknowledgment
+                    # Add new acknowledgment (reason will be added via popup in Phase 3)
                     ack_entry = {
                         'date': today,
                         'manifest_time': time_str,
                         'carrier': carrier,
                         'user': username,
-                        'reason': 'Done Late' if has_missed else '',
+                        'reason': '',  # Will be populated via popup
                         'timestamp': timestamp
                     }
                     ack_data.append(ack_entry)
@@ -1988,13 +2014,13 @@ class AlertDisplay(QWidget):
                     break
             
             if not existing_ack:
-                # Add new acknowledgment
+                # Add new acknowledgment (reason will be added via popup in Phase 3)
                 ack_entry = {
                     'date': today,
                     'manifest_time': time_str,
                     'carrier': carrier,
                     'user': username,
-                    'reason': 'Done Late' if is_late else '',
+                    'reason': '',  # Will be populated via popup
                     'timestamp': timestamp
                 }
                 ack_data.append(ack_entry)

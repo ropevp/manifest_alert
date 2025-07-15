@@ -16,6 +16,13 @@ if __name__ == "__main__":
     # Suppress Qt debug output for cleaner production experience
     os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg.debug=false'
     
+    # Migrate existing acknowledgments to new structure
+    try:
+        from data_manager import migrate_existing_acknowledgments
+        migrate_existing_acknowledgments()
+    except Exception as e:
+        print(f"Migration warning: {e}")
+    
     app = QApplication(sys.argv)
     
     # Set application properties for better Windows integration
