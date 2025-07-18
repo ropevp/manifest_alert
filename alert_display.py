@@ -488,6 +488,12 @@ class AlertDisplay(QWidget):
         self.flash_cycle_count = 0  # Track number of flashes in current cycle
         self.is_paused = False  # Track if we're in pause mode
         
+        # Snooze functionality
+        self.is_snoozed = False  # Track if sound is snoozed
+        self.snooze_timer = None  # Timer for auto-resuming sound after 5 minutes
+        self.snooze_end_time = None  # Track when snooze will end
+        self.snooze_countdown_timer = None  # Timer for updating countdown display
+        
         # Initialize sound effect
         self.setup_sound()
         
@@ -578,6 +584,29 @@ class AlertDisplay(QWidget):
         """)
         self.settings_btn.clicked.connect(self.show_settings_dialog)
         header_layout.addWidget(self.settings_btn)
+        
+        # Snooze button (only visible during alerts)
+        self.snooze_btn = QPushButton("🔊")
+        self.snooze_btn.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.snooze_btn.setFixedSize(60, 40)
+        self.snooze_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2c2c54;
+                color: #ffffff;
+                border: 2px solid #3742fa;
+                border-radius: 20px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: #3742fa;
+            }
+            QPushButton:pressed {
+                background-color: #1f2ecc;
+            }
+        """)
+        self.snooze_btn.clicked.connect(self.toggle_snooze)
+        self.snooze_btn.setVisible(False)  # Hidden by default
+        header_layout.addWidget(self.snooze_btn)
         
         # Refresh Data button in header with refresh icon
         self.reload_btn = QPushButton("🔄")
@@ -694,6 +723,7 @@ class AlertDisplay(QWidget):
         """Restart alarm audio if still in alarm mode"""
         if (getattr(self, 'alarm_sound_playing', False) and 
             getattr(self, 'alert_active', False) and
+            not self.is_snoozed and  # Don't restart if snoozed
             self.alert_sound and
             self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
             # Stop and restart for cleaner playback
@@ -780,6 +810,10 @@ class AlertDisplay(QWidget):
             self.pause_timer.stop()
         if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
             self.tv_fullscreen_timer.stop()
+        if hasattr(self, 'snooze_timer') and self.snooze_timer:
+            self.snooze_timer.stop()
+        if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
+            self.snooze_countdown_timer.stop()
         
         # Initialize alarm state tracking
         self.alarm_sound_playing = False  # Track if sound is currently playing
@@ -807,6 +841,16 @@ class AlertDisplay(QWidget):
         # TV fullscreen timer - forces fullscreen every minute for TV displays
         self.tv_fullscreen_timer = QTimer(self)
         self.tv_fullscreen_timer.timeout.connect(self.force_tv_fullscreen)
+        
+        # Snooze timer - auto-resumes sound after 5 minutes
+        self.snooze_timer = QTimer(self)
+        self.snooze_timer.timeout.connect(self.auto_resume_sound)
+        self.snooze_timer.setSingleShot(True)  # One-shot timer for snooze duration
+        
+        # Snooze countdown timer - updates display every second
+        self.snooze_countdown_timer = QTimer(self)
+        self.snooze_countdown_timer.timeout.connect(self.update_snooze_countdown)
+        self.snooze_countdown_timer.setSingleShot(False)  # Repeats every second
         
         # Timer starts/stops based on alert state in update_flash_timer()
         
@@ -848,12 +892,20 @@ class AlertDisplay(QWidget):
                 # Start continuous alarm sound when alarm starts - improved protection
                 if (self.alert_sound and 
                     not getattr(self, 'alarm_sound_playing', False) and
+                    not self.is_snoozed and  # Don't start sound if snoozed
                     self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
                     self.alarm_sound_playing = True
                     self.alert_sound.play()  # Will loop automatically via media status handler
+                
+                # Show snooze button during alerts
+                self.snooze_btn.setVisible(True)
+                self.update_snooze_button_icon()
             else:
                 # Stop all flashing and sound when alert is cleared
                 self.stop_all_alarms()
+                
+                # Hide snooze button when no alerts
+                self.snooze_btn.setVisible(False)
                 
                 # Restart TV fullscreen timer when no more alerts (if enabled in settings)
                 self.restart_tv_timer_if_enabled()
@@ -869,11 +921,17 @@ class AlertDisplay(QWidget):
             self.flash_timer.stop()
         if self.pause_timer and self.pause_timer.isActive():
             self.pause_timer.stop()
+        if self.snooze_timer and self.snooze_timer.isActive():
+            self.snooze_timer.stop()
+        if self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+            self.snooze_countdown_timer.stop()
             
         # Reset all alarm state
         self.flash_state = False
         self.is_paused = False
         self.alarm_sound_playing = False
+        self.is_snoozed = False  # Reset snooze state when alerts end
+        self.snooze_end_time = None  # Reset snooze end time
         
         # Stop sound if playing
         if self.alert_sound:
@@ -905,6 +963,148 @@ class AlertDisplay(QWidget):
             settings = self.load_settings()
             if settings.get('keep_fullscreen_tv', False):
                 self.start_tv_fullscreen_timer()
+    
+    def toggle_snooze(self):
+        """Toggle snooze state for alarm sound"""
+        if not self.alert_active:
+            return  # Only allow snooze during active alerts
+        
+        self.is_snoozed = not self.is_snoozed
+        
+        if self.is_snoozed:
+            # Stop the sound and start 5-minute timer
+            if self.alert_sound:
+                self.alert_sound.stop()
+            self.alarm_sound_playing = False
+            
+            # Set snooze end time and start countdown
+            import datetime as dt
+            self.snooze_end_time = dt.datetime.now() + dt.timedelta(minutes=5)
+            self.snooze_timer.start(300000)  # 5 minutes = 300,000 milliseconds
+            self.snooze_countdown_timer.start(1000)  # Update every second
+        else:
+            # Resume sound immediately and stop timers
+            if self.snooze_timer.isActive():
+                self.snooze_timer.stop()
+            if self.snooze_countdown_timer.isActive():
+                self.snooze_countdown_timer.stop()
+            self.snooze_end_time = None
+            
+            if self.alert_sound and self.alert_active:
+                self.alarm_sound_playing = True
+                self.alert_sound.play()
+        
+        # Update button icon and summary display
+        self.update_snooze_button_icon()
+        self.populate_data()  # Refresh to update summary with countdown
+    
+    def auto_resume_sound(self):
+        """Auto-resume sound after 5-minute snooze period"""
+        if self.alert_active and self.is_snoozed:
+            self.is_snoozed = False
+            self.snooze_end_time = None
+            
+            # Stop countdown timer
+            if self.snooze_countdown_timer.isActive():
+                self.snooze_countdown_timer.stop()
+            
+            if self.alert_sound:
+                self.alarm_sound_playing = True
+                self.alert_sound.play()
+            
+            self.update_snooze_button_icon()
+            self.populate_data()  # Refresh to update summary without countdown
+    
+    def update_snooze_countdown(self):
+        """Update the snooze countdown display every second"""
+        if not self.is_snoozed or not self.snooze_end_time:
+            # Stop countdown if no longer snoozed
+            if self.snooze_countdown_timer.isActive():
+                self.snooze_countdown_timer.stop()
+            return
+        
+        import datetime as dt
+        now = dt.datetime.now()
+        
+        if now >= self.snooze_end_time:
+            # Countdown finished - this shouldn't happen as auto_resume_sound should handle it
+            # but included as safety check
+            if self.snooze_countdown_timer.isActive():
+                self.snooze_countdown_timer.stop()
+            return
+        
+        # Calculate remaining time
+        time_remaining = self.snooze_end_time - now
+        total_seconds = int(time_remaining.total_seconds())
+        
+        if total_seconds <= 0:
+            # Time's up
+            if self.snooze_countdown_timer.isActive():
+                self.snooze_countdown_timer.stop()
+            return
+        
+        # Update the summary display without triggering full data refresh
+        # This prevents interfering with the main data refresh cycle
+        self.update_summary_with_countdown(total_seconds)
+    
+    def update_summary_with_countdown(self, remaining_seconds):
+        """Update summary display with countdown - lightweight version"""
+        if not self.alert_active:
+            return
+            
+        minutes = remaining_seconds // 60
+        seconds = remaining_seconds % 60
+        
+        # Create the message with countdown
+        countdown_text = f"ACTIVE ALERTS - Unmute in {minutes}m {seconds}s"
+        
+        # Update summary label directly to avoid recursive calls
+        text_color = "#ffffff"  # White text on red background
+        self.summary_label.setText(countdown_text)
+        self.summary_label.setStyleSheet(f"""
+            background-color: #ff4757;
+            color: {text_color};
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 3px;
+        """)
+    
+    def update_snooze_button_icon(self):
+        """Update snooze button icon based on snooze state"""
+        if self.is_snoozed:
+            self.snooze_btn.setText("🔇")  # Muted speaker icon
+            self.snooze_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #ff4757;
+                    color: #ffffff;
+                    border: 2px solid #ff4757;
+                    border-radius: 20px;
+                    padding: 0px;
+                }
+                QPushButton:hover {
+                    background-color: #ff3838;
+                }
+                QPushButton:pressed {
+                    background-color: #e84118;
+                }
+            """)
+        else:
+            self.snooze_btn.setText("🔊")  # Normal speaker icon
+            self.snooze_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2c2c54;
+                    color: #ffffff;
+                    border: 2px solid #3742fa;
+                    border-radius: 20px;
+                    padding: 0px;
+                }
+                QPushButton:hover {
+                    background-color: #3742fa;
+                }
+                QPushButton:pressed {
+                    background-color: #1f2ecc;
+                }
+            """)
     
     def ensure_alarm_on_correct_monitor(self):
         """Ensure alarm is displayed fullscreen on the correct monitor - simplified approach"""
@@ -1263,7 +1463,19 @@ class AlertDisplay(QWidget):
         # Update summary with next manifest countdown
         next_manifest_info = self.get_next_manifest_info(manifests, now)
         if active_count > 0:
-            self.update_summary("ACTIVE ALERTS", "#ff4757")
+            # Check if snoozed and show countdown
+            if self.is_snoozed and self.snooze_end_time:
+                import datetime as dt
+                time_remaining = self.snooze_end_time - dt.datetime.now()
+                total_seconds = int(time_remaining.total_seconds())
+                if total_seconds > 0:
+                    minutes = total_seconds // 60
+                    seconds = total_seconds % 60
+                    self.update_summary(f"ACTIVE ALERTS - Unmute in {minutes}m {seconds}s", "#ff4757")
+                else:
+                    self.update_summary("ACTIVE ALERTS", "#ff4757")
+            else:
+                self.update_summary("ACTIVE ALERTS", "#ff4757")
         elif missed_count > 0:
             self.update_summary("MISSED MANIFESTS", "#c44569")
         elif next_manifest_info:
@@ -1845,6 +2057,12 @@ class AlertDisplay(QWidget):
         if hasattr(self, 'tv_fullscreen_timer') and self.tv_fullscreen_timer:
             self.tv_fullscreen_timer.stop()
             self.tv_fullscreen_timer = None
+        if hasattr(self, 'snooze_timer') and self.snooze_timer:
+            self.snooze_timer.stop()
+            self.snooze_timer = None
+        if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
+            self.snooze_countdown_timer.stop()
+            self.snooze_countdown_timer = None
         
         # Clean up status cards
         for card in self.status_cards.values():
