@@ -114,9 +114,9 @@ class StatusCard(QFrame):
         center_layout.setSpacing(0)  # No spacing in center section
         center_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create a horizontal layout for carriers and acknowledgment side by side
+        # Create a horizontal layout for carriers and individual acknowledgments side by side
         carriers_ack_layout = QHBoxLayout()
-        carriers_ack_layout.setSpacing(15)  # Reduced spacing between carriers and ack  
+        carriers_ack_layout.setSpacing(15)  # Spacing between carriers and ack sections
         carriers_ack_layout.setContentsMargins(0, 0, 0, 0)  # No margins
         
         # Left part: carriers (will be recreated as clickable labels)
@@ -126,33 +126,15 @@ class StatusCard(QFrame):
         self.carriers_layout.setSpacing(1)  # Extremely tight - reduced from 2 to 1
         carriers_ack_layout.addWidget(self.carriers_widget)
         
-        # Right part: acknowledgment (consistent fixed width)
-        ack_widget = QWidget()
-        ack_widget.setFixedWidth(250)  # Consistent fixed width for all cards
-        ack_widget.setStyleSheet("background: transparent;")
+        # Right part: individual acknowledgments (650px width as specified)
+        self.ack_widget = QWidget()
+        self.ack_widget.setFixedWidth(650)  # Fixed width as per requirements
+        self.ack_widget.setStyleSheet("background: transparent;")
         
-        ack_layout = QVBoxLayout(ack_widget)
-        ack_layout.setContentsMargins(0, 0, 0, 0)  # No margins
-        ack_layout.setSpacing(0)  # No spacing between status and details
-        
-        # Acknowledgment status text
-        self.ack_status_label = QLabel("")
-        self.ack_status_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))  # Reduced from 22 to 18 to prevent clipping
-        self.ack_status_label.setStyleSheet("color: #2ed573; background: transparent;")
-        self.ack_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # Left align
-        ack_layout.addWidget(self.ack_status_label)
-        
-        # Reason/details text
-        self.ack_details_label = QLabel("")
-        self.ack_details_label.setFont(QFont("Segoe UI", 16))  # Reduced from 20 to 16 to prevent clipping
-        self.ack_details_label.setStyleSheet("color: #ffffff; background: transparent;")
-        self.ack_details_label.setWordWrap(True)
-        self.ack_details_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)  # Left align
-        ack_layout.addWidget(self.ack_details_label)
-        
-        ack_layout.addStretch()
-        carriers_ack_layout.addWidget(ack_widget)
-        # Removed addStretch here to let sections naturally space out
+        self.ack_layout = QVBoxLayout(self.ack_widget)
+        self.ack_layout.setContentsMargins(0, 0, 0, 0)  # No margins
+        self.ack_layout.setSpacing(1)  # Match carrier spacing for alignment
+        carriers_ack_layout.addWidget(self.ack_widget)
         
         center_layout.addLayout(carriers_ack_layout)
         center_layout.addStretch()
@@ -197,27 +179,15 @@ class StatusCard(QFrame):
         if manifests:
             self.update_manifest_display()
         else:
-            self.details_label.setText("")
-    
-    def set_acknowledgment(self, user_info, reason=None):
-        """Update acknowledgment display with user details"""
-        if user_info:
-            if reason == "late":
-                # For missed deliveries - show user and time
-                self.ack_status_label.setText("Done Late")
-                self.ack_details_label.setText(f"by {user_info}")
-                self.ack_status_label.setStyleSheet("color: #ffb347; background: transparent;")  # Lighter orange
-                self.ack_details_label.setStyleSheet("color: #ffb347; background: transparent;")  # Match color
-            else:
-                # For completed/acknowledged - show user and time
-                self.ack_status_label.setText("Done")
-                self.ack_details_label.setText(f"by {user_info}")
-                self.ack_status_label.setStyleSheet("color: #2ed573; background: transparent;")  # Green for done
-                self.ack_details_label.setStyleSheet("color: #2ed573; background: transparent;")  # Match color
-        else:
-            # Clear acknowledgment
-            self.ack_status_label.setText("")
-            self.ack_details_label.setText("")
+            # Clear both carrier and acknowledgment layouts
+            for i in reversed(range(self.carriers_layout.count())):
+                child = self.carriers_layout.itemAt(i).widget()
+                if child:
+                    child.setParent(None)
+            for i in reversed(range(self.ack_layout.count())):
+                child = self.ack_layout.itemAt(i).widget()
+                if child:
+                    child.setParent(None)
     
     def card_clicked(self, event):
         """Handle card click - disabled for now, use double-click on time header"""
@@ -262,20 +232,28 @@ class StatusCard(QFrame):
         pass
     
     def update_manifest_display(self):
-        """Update the manifest display with individual clickable carriers"""
+        """Update the manifest display with individual clickable carriers and acknowledgment labels"""
         # Clear existing carrier labels
         for i in reversed(range(self.carriers_layout.count())):
             child = self.carriers_layout.itemAt(i).widget()
             if child:
                 child.setParent(None)
         
+        # Clear existing acknowledgment labels
+        for i in reversed(range(self.ack_layout.count())):
+            child = self.ack_layout.itemAt(i).widget()
+            if child:
+                child.setParent(None)
+        
         if self.manifests:
+            # Load acknowledgments for this time slot
+            acknowledgments = self.get_acknowledgments_for_time_slot()
+            
             for carrier, status in self.manifests:
                 # Create individual carrier label
                 carrier_label = QLabel()
                 carrier_label.setFont(QFont("Segoe UI", 22))  # Increased from 18 to 22
                 carrier_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-                # No padding at all for minimal line height
                 
                 # Set text and styling based on status (clean display)
                 if status == "Acknowledged":
@@ -303,6 +281,42 @@ class StatusCard(QFrame):
                     carrier_label.setStyleSheet("color: #ffffff; background: transparent;")
                 
                 self.carriers_layout.addWidget(carrier_label)
+                
+                # Create corresponding individual acknowledgment label
+                ack_label = QLabel()
+                ack_label.setFont(QFont("Segoe UI", 18))  # Slightly smaller than carrier font (22 vs 18)
+                ack_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                ack_label.setStyleSheet("background: transparent;")
+                ack_label.setWordWrap(False)  # Ensure single line as per requirements
+                
+                # Set acknowledgment text based on status and data
+                if carrier in acknowledgments:
+                    ack_info = acknowledgments[carrier]
+                    user_name = ack_info.get('user', 'Unknown')
+                    reason = ack_info.get('reason', '')
+                    timestamp = ack_info.get('timestamp', '')
+                    
+                    # Format timestamp to show just time
+                    time_str = ""
+                    if timestamp:
+                        try:
+                            ack_time = datetime.fromisoformat(timestamp)
+                            time_str = f" at {ack_time.strftime('%H:%M')}"
+                        except:
+                            pass
+                    
+                    if reason == "Done Late":
+                        ack_label.setText(f"Done Late by {user_name}{time_str}")
+                        ack_label.setStyleSheet("color: #ffb347; background: transparent;")  # Orange for late
+                    elif status in ["Acknowledged", "AcknowledgedLate"]:
+                        ack_label.setText(f"Done by {user_name}{time_str}")
+                        ack_label.setStyleSheet("color: #2ed573; background: transparent;")  # Green for done
+                    else:
+                        ack_label.setText("")  # No acknowledgment yet
+                else:
+                    ack_label.setText("")  # No acknowledgment data
+                
+                self.ack_layout.addWidget(ack_label)
             
             # Extremely compact height calculation for minimal vertical space
             line_count = len(self.manifests)
@@ -350,66 +364,44 @@ class StatusCard(QFrame):
         active_count = sum(1 for _, status in self.manifests if status == "Active")
         total_count = len(self.manifests)
         
-        # Determine card status and acknowledgment display
+        # Determine card status - no individual acknowledgment display here since we show per-carrier
         if acknowledged_count == total_count:
             # All acknowledged
             self.status = "ACKNOWLEDGED"
-            # Show acknowledgment info from the first acknowledged item
-            if self.parent_display:
-                ack_info = self.get_acknowledgment_info()
-                if ack_info:
-                    user_name = ack_info.get('user', 'Unknown')
-                    reason = ack_info.get('reason', '')
-                    timestamp = ack_info.get('timestamp', '')
-                    if timestamp:
-                        try:
-                            # Parse timestamp and format time
-                            ack_time = datetime.fromisoformat(timestamp)
-                            time_str = ack_time.strftime('%H:%M')
-                            if reason:  # Late acknowledgment
-                                self.set_acknowledgment(f"{user_name} at {time_str}", "late")
-                            else:  # Regular acknowledgment
-                                self.set_acknowledgment(f"{user_name} at {time_str}")
-                        except:
-                            if reason:
-                                self.set_acknowledgment(user_name, "late")
-                            else:
-                                self.set_acknowledgment(user_name)
-                    else:
-                        if reason:
-                            self.set_acknowledgment(user_name, "late")
-                        else:
-                            self.set_acknowledgment(user_name)
         elif missed_count > 0:
             # Has missed items - card becomes MISSED
             self.status = "MISSED"
-            if acknowledged_count > 0:
-                # Partially acknowledged
-                self.ack_status_label.setText(f"{acknowledged_count}/{total_count} Done")
-                self.ack_status_label.setStyleSheet("color: #ffb347; background: transparent;")  # Lighter orange for partial
-                self.ack_details_label.setText("")
-            else:
-                self.set_acknowledgment("")  # Clear acknowledgment display
         elif active_count > 0:
             # Has active items - card becomes ACTIVE
             self.status = "ACTIVE"
-            if acknowledged_count > 0:
-                # Partially acknowledged
-                self.ack_status_label.setText(f"{acknowledged_count}/{total_count} Done")
-                self.ack_status_label.setStyleSheet("color: #ffb347; background: transparent;")  # Lighter orange for partial
-                self.ack_details_label.setText("")
-            else:
-                self.set_acknowledgment("")  # Clear acknowledgment display
         else:
             # Open items
             self.status = "OPEN"
-            self.set_acknowledgment("")  # Clear acknowledgment display
         
         # Update the combined time/status label - change ACKNOWLEDGED to DONE
         display_status = "DONE" if self.status == "ACKNOWLEDGED" else self.status
         self.time_status_label.setText(f"{self.time_str} - {display_status}")
         self.update_styling()
     
+    def get_acknowledgments_for_time_slot(self):
+        """Get acknowledgment info for all carriers in this time slot"""
+        if not self.parent_display:
+            return {}
+            
+        try:
+            acks = self.parent_display.load_acknowledgments()
+            today = datetime.now().date().isoformat()
+            time_slot_acks = {}
+            
+            for carrier, status in self.manifests:
+                ack_key = f"{today}_{self.time_str}_{carrier}"
+                if ack_key in acks:
+                    time_slot_acks[carrier] = acks[ack_key]
+                    
+            return time_slot_acks
+        except:
+            return {}
+
     def get_acknowledgment_info(self):
         """Get acknowledgment info for the first acknowledged item"""
         if not self.parent_display:
