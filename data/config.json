@@ -1,11 +1,56 @@
 {
   "manifests": [
     {
-      "time": "10:00",
+      "time": "07:02",
+      "carriers": [
+        "Australia Post Metro",
+        "EParcel Express",
+        "EParcel Postplus"
+      ]
+    },
+    {
+      "time": "11:02",
       "carriers": [
         "AUP International for NZ",
         "Australia Post Metro",
         "EParcel Postplus"
+      ]
+    },
+    {
+      "time": "12:32",
+      "carriers": [
+        "EParcel Express"
+      ]
+    },
+    {
+      "time": "13:47",
+      "carriers": [
+        "NZ Post DPK International",
+        "AUP Oversize Parcel",
+        "DHL Express"
+      ]
+    },
+    {
+      "time": "14:32",
+      "carriers": [
+        "AUP Oversize Parcel",
+        "DHL Express"
+      ]
+    },
+    {
+      "time": "15:32",
+      "carriers": [
+        "Keep at plant",
+        "Toll Api",
+        "Toll Priority"
+      ]
+    },
+    {
+      "time": "16:02",
+      "carriers": [
+        "AUP International Zone 3",
+        "Australia Post Metro",
+        "EParcel Postlus"
       ]
     }
   ]

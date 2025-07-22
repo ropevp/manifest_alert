@@ -71,6 +71,12 @@ echo.
 echo [4/4] Creating desktop shortcut...
 .venv\Scripts\python.exe install_shortcuts.py
 
+REM Display version information  
+echo.
+echo 📋 VERSION INFO:
+git describe --tags --always 2>nul || git rev-parse --short HEAD 2>nul || echo "Version info unavailable"
+git branch --show-current 2>nul || echo "Branch info unavailable"
+
 echo.
 echo ===============================================================
 echo ✅ INSTALLATION COMPLETE!
@@ -97,7 +103,19 @@ if exist "data\config.json" (
 echo.
 echo [2/4] Downloading latest version...
 git fetch origin
-git reset --hard origin/main
+
+REM Try to determine the latest stable branch
+REM Priority: main > latest version tag > fallback to main
+echo Determining latest stable version...
+git ls-remote --heads origin | findstr /c:"refs/heads/main" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Using main branch (latest stable)
+    git reset --hard origin/main
+) else (
+    REM Fallback to origin/HEAD if main doesn't exist
+    echo Main branch not found, using default branch
+    git reset --hard origin/HEAD
+)
 if %errorlevel% neq 0 (
     echo ERROR: Failed to download updates
     echo Check your internet connection and try again
@@ -125,6 +143,12 @@ if exist "data\config.json.backup" (
 echo.
 echo [4/4] Updating desktop shortcuts...
 .venv\Scripts\python.exe install_shortcuts.py
+
+REM Display version information
+echo.
+echo 📋 VERSION INFO:
+git describe --tags --always 2>nul || git rev-parse --short HEAD 2>nul || echo "Version info unavailable"
+git branch --show-current 2>nul || echo "Branch info unavailable"
 
 echo.
 echo ===============================================================
