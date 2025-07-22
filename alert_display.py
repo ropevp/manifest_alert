@@ -17,6 +17,7 @@ from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl
+from mute_manager import get_mute_manager
 import os
 import json
 import sys
@@ -488,8 +489,8 @@ class AlertDisplay(QWidget):
         self.flash_cycle_count = 0  # Track number of flashes in current cycle
         self.is_paused = False  # Track if we're in pause mode
         
-        # Snooze functionality
-        self.is_snoozed = False  # Track if sound is snoozed
+        # Snooze functionality - now using centralized mute manager
+        self.mute_manager = get_mute_manager()
         self.snooze_timer = None  # Timer for auto-resuming sound after 5 minutes
         self.snooze_end_time = None  # Track when snooze will end
         self.snooze_countdown_timer = None  # Timer for updating countdown display
@@ -501,6 +502,12 @@ class AlertDisplay(QWidget):
         self.setup_timers()
         self.apply_background_style()  # Initialize background
         self.populate_data()
+    
+    @property
+    def is_snoozed(self):
+        """Check if system is currently muted (centralized)"""
+        muted, _ = self.mute_manager.is_currently_muted()
+        return muted
     
     def setup_ui(self):
         """Create the modern card layout"""
@@ -930,8 +937,8 @@ class AlertDisplay(QWidget):
         self.flash_state = False
         self.is_paused = False
         self.alarm_sound_playing = False
-        self.is_snoozed = False  # Reset snooze state when alerts end
-        self.snooze_end_time = None  # Reset snooze end time
+        # Note: Mute state is now handled by centralized mute manager
+        self.snooze_end_time = None  # Reset local snooze end time
         
         # Stop sound if playing
         if self.alert_sound:
@@ -965,50 +972,62 @@ class AlertDisplay(QWidget):
                 self.start_tv_fullscreen_timer()
     
     def toggle_snooze(self):
-        """Toggle snooze state for alarm sound"""
+        """Toggle mute state using centralized mute manager"""
         if not self.alert_active:
-            return  # Only allow snooze during active alerts
+            return  # Only allow mute during active alerts
         
-        self.is_snoozed = not self.is_snoozed
+        # Get current user name (you might want to make this configurable)
+        import os
+        current_user = os.getenv('USERNAME', 'Unknown')
         
-        if self.is_snoozed:
-            # Stop the sound and start 5-minute timer
+        # Toggle mute status with 5-minute duration
+        was_muted = self.is_snoozed
+        new_state, message = self.mute_manager.toggle_mute(current_user, 5)
+        
+        if new_state and not was_muted:
+            # Just muted - stop the sound and start local timers for UI feedback
             if self.alert_sound:
                 self.alert_sound.stop()
             self.alarm_sound_playing = False
             
-            # Set snooze end time and start countdown
+            # Set local snooze end time for UI countdown display
             import datetime as dt
             self.snooze_end_time = dt.datetime.now() + dt.timedelta(minutes=5)
             self.snooze_timer.start(300000)  # 5 minutes = 300,000 milliseconds
             self.snooze_countdown_timer.start(1000)  # Update every second
-        else:
-            # Resume sound immediately and stop timers
-            if self.snooze_timer.isActive():
+            
+            print(f"🔇 Alerts muted for 5 minutes by {current_user}")
+            
+        elif not new_state and was_muted:
+            # Just unmuted - resume sound and stop local timers
+            if self.snooze_timer and self.snooze_timer.isActive():
                 self.snooze_timer.stop()
-            if self.snooze_countdown_timer.isActive():
+            if self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
                 self.snooze_countdown_timer.stop()
             self.snooze_end_time = None
             
             if self.alert_sound and self.alert_active:
                 self.alarm_sound_playing = True
                 self.alert_sound.play()
+            
+            print(f"🔊 Alerts unmuted by {current_user}")
         
-        # Update button icon and summary display
+        # Update button appearance
         self.update_snooze_button_icon()
-        self.populate_data()  # Refresh to update summary with countdown
     
     def auto_resume_sound(self):
-        """Auto-resume sound after 5-minute snooze period"""
-        if self.alert_active and self.is_snoozed:
-            self.is_snoozed = False
+        """Auto-resume sound after 5-minute mute period (centralized mute auto-expires)"""
+        # With centralized mute manager, auto-resume is handled by the mute manager itself
+        # This method just needs to clean up local UI state
+        if self.alert_active:
             self.snooze_end_time = None
             
             # Stop countdown timer
-            if self.snooze_countdown_timer.isActive():
+            if self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
                 self.snooze_countdown_timer.stop()
             
-            if self.alert_sound:
+            # Check current mute state and resume sound if unmuted
+            if not self.is_snoozed and self.alert_sound:
                 self.alarm_sound_playing = True
                 self.alert_sound.play()
             
