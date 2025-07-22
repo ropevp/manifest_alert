@@ -7,6 +7,20 @@
         "Australia Post Metro",
         "EParcel Postplus"
       ]
+    },
+    {
+      "time": "11:00", 
+      "carriers": [
+        "DHL Express",
+        "TNT Express"
+      ]
+    },
+    {
+      "time": "14:00",
+      "carriers": [
+        "FedEx International",
+        "UPS Worldwide"
+      ]
     }
   ]
 }

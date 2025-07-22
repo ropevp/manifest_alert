@@ -7,6 +7,11 @@ tests/__pycache__/
 *.log
 *.tmp
 
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
 # Backup files
 backup/
 
