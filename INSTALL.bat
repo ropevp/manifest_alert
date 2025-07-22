@@ -49,7 +49,7 @@ echo ✅ Git and Python are available
 
 echo.
 echo [2/4] Downloading Manifest Alert System...
-git clone https://github.com/ropevp/manifest_alert.git .
+git clone -b 3.3 https://github.com/ropevp/manifest_alert.git .
 if %errorlevel% neq 0 (
     echo ERROR: Failed to download from GitHub
     echo Check your internet connection and try again
@@ -97,7 +97,7 @@ if exist "data\config.json" (
 echo.
 echo [2/4] Downloading latest version...
 git fetch origin
-git reset --hard origin/3.00
+git reset --hard origin/3.3
 if %errorlevel% neq 0 (
     echo ERROR: Failed to download updates
     echo Check your internet connection and try again
