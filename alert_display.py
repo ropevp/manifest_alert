@@ -60,7 +60,7 @@ except ImportError:
 
 
 class StatusCard(QFrame):
-    """Modern status card widget"""
+    """Modern status card widget with dynamic scaling"""
     
     def __init__(self, time_str, status="OPEN", parent_display=None):
         super().__init__()
@@ -68,8 +68,9 @@ class StatusCard(QFrame):
         self.status = status
         self.manifests = []
         self.parent_display = parent_display  # Reference to main display for acknowledgments
+        self.is_maximized = False  # Track if this card is in maximized mode
         
-        self.setMinimumSize(1200, 80)  # Reduced minimum height significantly
+        self.setMinimumSize(1200, 80)  # Default minimum height
         self.setFrameStyle(QFrame.Shape.Box)
         self.setup_ui()
         self.update_styling()
@@ -425,6 +426,60 @@ class StatusCard(QFrame):
             return None
         except:
             return None
+    
+    def set_maximized_mode(self, maximized):
+        """Set card to maximized mode for single alert emphasis"""
+        self.is_maximized = maximized
+        
+        if maximized:
+            # Maximized mode: larger, transparent background for flash visibility
+            self.setMinimumSize(1200, 400)  # Much larger height
+            self.setMaximumHeight(600)      # Allow even more height if needed
+            
+            # Make background transparent so red flash shows through
+            self.setStyleSheet("""
+                QFrame {
+                    background: transparent;
+                    border: 3px solid #3742fa;
+                    border-radius: 15px;
+                }
+            """)
+            
+            # Increase font sizes for better visibility
+            self.time_status_label.setFont(QFont("Segoe UI", 36, QFont.Weight.Bold))  # Larger header
+            
+            # Update carrier and acknowledgment label fonts
+            for i in range(self.carriers_layout.count()):
+                widget = self.carriers_layout.itemAt(i).widget()
+                if widget and hasattr(widget, 'setFont'):
+                    widget.setFont(QFont("Segoe UI", 18, QFont.Weight.Normal))  # Larger carriers
+                    
+            for i in range(self.ack_layout.count()):
+                widget = self.ack_layout.itemAt(i).widget()
+                if widget and hasattr(widget, 'setFont'):
+                    widget.setFont(QFont("Segoe UI", 18, QFont.Weight.Normal))  # Larger ack text
+                    
+        else:
+            # Normal mode: standard size and background
+            self.setMinimumSize(1200, 80)   # Normal height
+            self.setMaximumHeight(16777215) # Remove height restriction
+            
+            # Restore normal styling
+            self.update_styling()
+            
+            # Restore normal font sizes
+            self.time_status_label.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))  # Normal header
+            
+            # Restore carrier and acknowledgment label fonts
+            for i in range(self.carriers_layout.count()):
+                widget = self.carriers_layout.itemAt(i).widget()
+                if widget and hasattr(widget, 'setFont'):
+                    widget.setFont(QFont("Segoe UI", 14, QFont.Weight.Normal))  # Normal carriers
+                    
+            for i in range(self.ack_layout.count()):
+                widget = self.ack_layout.itemAt(i).widget()
+                if widget and hasattr(widget, 'setFont'):
+                    widget.setFont(QFont("Segoe UI", 14, QFont.Weight.Normal))  # Normal ack text
 
 
 class AlertDisplay(QWidget):
@@ -1632,6 +1687,37 @@ class AlertDisplay(QWidget):
             # Add to grid - one per row
             self.cards_layout.addWidget(card, row, 0)
             row += 1
+        
+        # Determine if single card scaling should be used
+        # Single card mode: exactly one active alert and no missed alerts
+        active_cards = []
+        missed_cards = []
+        
+        for time_str, card in self.status_cards.items():
+            card_has_active = False
+            card_has_missed = False
+            
+            for carrier, status in card.manifests:
+                if status == "Active":
+                    card_has_active = True
+                elif status == "Missed":
+                    card_has_missed = True
+            
+            if card_has_active:
+                active_cards.append(card)
+            if card_has_missed:
+                missed_cards.append(card)
+        
+        # Apply single card scaling if conditions are met
+        single_card_mode = len(active_cards) == 1 and len(missed_cards) == 0
+        
+        for card in self.status_cards.values():
+            if single_card_mode and card in active_cards:
+                # This is the single active card - maximize it
+                card.set_maximized_mode(True)
+            else:
+                # All other cards in normal mode
+                card.set_maximized_mode(False)
         
         # Update alert state
         self.alert_active = (active_count > 0 or missed_count > 0)
