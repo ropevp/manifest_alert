@@ -498,6 +498,13 @@ class AlertDisplay(QWidget):
         self._mute_check_interval = 30  # Only check network every 30 seconds
         self._fast_cache_duration = 5   # Use fast cache for 5 seconds between network calls
         
+        # Ultra-fast caching for network data
+        self._cached_config = None
+        self._cached_acks = None
+        self._config_cache_time = 0
+        self._acks_cache_time = 0
+        self._data_cache_duration = 10  # Cache data for 10 seconds
+        
         # Initialize sound effect
         self.setup_sound()
         
@@ -904,7 +911,7 @@ class AlertDisplay(QWidget):
         # Data refresh timer
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.populate_data)
-        self.refresh_timer.start(10000)  # 10 seconds (default when not in alert mode)
+        self.refresh_timer.start(30000)  # 30 seconds - reduced frequency for better performance
         
         # Flash timer for alarm background - SINGLE SHOT to prevent overlap
         self.flash_timer = QTimer(self)
@@ -944,7 +951,7 @@ class AlertDisplay(QWidget):
         if self.refresh_timer:
             # Always use 10 seconds - no need for 1-second updates during alerts
             # This prevents excessive data refreshing that can cause window flashing
-            self.refresh_timer.start(10000)  # 10 seconds for all modes
+            self.refresh_timer.start(30000)  # 30 seconds - reduced frequency for better performance
     
     def update_flash_timer(self):
         """Start or stop flash timer based on alert state with single alarm instance"""
@@ -970,7 +977,7 @@ class AlertDisplay(QWidget):
                 # Start continuous alarm sound when alarm starts - improved protection
                 if (self.alert_sound and 
                     not getattr(self, 'alarm_sound_playing', False) and
-                    not self.is_snoozed and  # Don't start sound if snoozed
+                    not self._cached_mute_status and  # Use cached status instead of is_snoozed property
                     self.alert_sound.playbackState() != QMediaPlayer.PlaybackState.PlayingState):
                     self.alarm_sound_playing = True
                     self.alert_sound.play()  # Will loop automatically via media status handler
@@ -1123,7 +1130,7 @@ class AlertDisplay(QWidget):
                 self.snooze_countdown_timer.stop()
             
             # Check current mute state and resume sound if unmuted
-            if not self.is_snoozed and self.alert_sound:
+            if not self._cached_mute_status and self.alert_sound:
                 self.alarm_sound_playing = True
                 self.alert_sound.play()
             
@@ -1462,30 +1469,66 @@ class AlertDisplay(QWidget):
         self.clock_label.setText(now.strftime('%H:%M'))
     
     def load_config(self):
-        """Load configuration from settings-specified folder or fallback"""
+        """Load configuration with aggressive caching to avoid network delays"""
+        import time
+        current_time = time.time()
+        
+        # Return cached config if still valid
+        if (self._cached_config and 
+            current_time - self._config_cache_time < self._data_cache_duration):
+            return self._cached_config
+        
+        # Load config with timeout protection
         try:
-            settings = self.load_settings()
-            data_folder = settings.get('data_folder', '')
+            import threading
+            result = [None]
             
-            # Try settings-specified folder first
-            if data_folder and os.path.exists(data_folder):
-                config_path = os.path.join(data_folder, 'config.json')
-                if os.path.exists(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        return json.load(f)
+            def load_config_network():
+                try:
+                    settings = self.load_settings()
+                    data_folder = settings.get('data_folder', '')
+                    
+                    # Try settings-specified folder first
+                    if data_folder and os.path.exists(data_folder):
+                        config_path = os.path.join(data_folder, 'config.json')
+                        if os.path.exists(config_path):
+                            with open(config_path, 'r', encoding='utf-8') as f:
+                                result[0] = json.load(f)
+                                return
+                    
+                    # Fallback to default locations
+                    for folder in ['data', 'app_data', '.']:
+                        config_path = os.path.join(os.path.dirname(__file__), folder, 'config.json')
+                        if os.path.exists(config_path):
+                            with open(config_path, 'r', encoding='utf-8') as f:
+                                result[0] = json.load(f)
+                                return
+                    
+                    # Import fallback
+                    from data_manager import load_config
+                    result[0] = load_config()
+                except:
+                    result[0] = {"manifests": []}
             
-            # Fallback to default locations
-            for folder in ['data', 'app_data', '.']:
-                config_path = os.path.join(os.path.dirname(__file__), folder, 'config.json')
-                if os.path.exists(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        return json.load(f)
+            thread = threading.Thread(target=load_config_network)
+            thread.daemon = True
+            thread.start()
+            thread.join(1.0)  # 1 second timeout
             
-            # Return fallback data if no config found
-            return load_config()
-            
+            if result[0]:
+                self._cached_config = result[0]
+                self._config_cache_time = current_time
+                return self._cached_config
+                
         except Exception:
-            return load_config()
+            pass
+            
+        # Return cached data if network fails
+        if self._cached_config:
+            return self._cached_config
+            
+        # Ultimate fallback
+        return {"manifests": []}
     
     def populate_data(self):
         """Populate cards with manifest data"""
@@ -1689,29 +1732,63 @@ class AlertDisplay(QWidget):
             return os.path.join(os.path.dirname(__file__), 'ack.json')
     
     def load_acknowledgments(self):
-        """Load acknowledgment data from ack.json"""
+        """Load acknowledgment data with aggressive caching to avoid network delays"""
+        import time
+        current_time = time.time()
+        
+        # Return cached acks if still valid
+        if (self._cached_acks and 
+            current_time - self._acks_cache_time < self._data_cache_duration):
+            return self._cached_acks
+        
+        # Load acks with timeout protection
         try:
-            ack_path = self.get_ack_path()
+            import threading
+            result = [None]
             
-            if not os.path.exists(ack_path):
-                return {}
+            def load_acks_network():
+                try:
+                    ack_path = self.get_ack_path()
+                    
+                    if not os.path.exists(ack_path):
+                        result[0] = {}
+                        return
+                    
+                    with open(ack_path, 'r', encoding='utf-8') as f:
+                        ack_data = json.load(f)
+                    
+                    # Convert to lookup dict
+                    acks = {}
+                    today = datetime.now().date().isoformat()
+                    
+                    for ack in ack_data:
+                        if ack.get('date') == today:
+                            key = f"{ack['date']}_{ack['manifest_time']}_{ack['carrier']}"
+                            acks[key] = ack
+                    
+                    result[0] = acks
+                except:
+                    result[0] = {}
             
-            with open(ack_path, 'r', encoding='utf-8') as f:
-                ack_data = json.load(f)
+            thread = threading.Thread(target=load_acks_network)
+            thread.daemon = True
+            thread.start()
+            thread.join(1.0)  # 1 second timeout
             
-            # Convert to lookup dict
-            acks = {}
-            today = datetime.now().date().isoformat()
+            if result[0] is not None:
+                self._cached_acks = result[0]
+                self._acks_cache_time = current_time
+                return self._cached_acks
+                
+        except Exception:
+            pass
             
-            for ack in ack_data:
-                if ack.get('date') == today:
-                    key = f"{ack['date']}_{ack['manifest_time']}_{ack['carrier']}"
-                    acks[key] = ack
+        # Return cached data if network fails
+        if self._cached_acks:
+            return self._cached_acks
             
-            return acks
-            
-        except Exception as e:
-            return {}
+        # Ultimate fallback
+        return {}
     
     def show_settings_dialog(self):
         """Show settings configuration dialog with CSV export/import functionality"""
