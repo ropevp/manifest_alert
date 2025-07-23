@@ -190,6 +190,11 @@ class StatusCard(QFrame):
                 if child:
                     child.setParent(None)
     
+    def set_acknowledgment(self, user_info, reason=None):
+        """Compatibility method for old acknowledgment system - now handled per-carrier"""
+        # This method is kept for compatibility but does nothing since we now use individual acknowledgments
+        pass
+    
     def card_clicked(self, event):
         """Handle card click - disabled for now, use double-click on time header"""
         pass  # Disabled card clicking, only time header double-click works
@@ -286,7 +291,7 @@ class StatusCard(QFrame):
                 # Create corresponding individual acknowledgment label
                 ack_label = QLabel()
                 ack_label.setFont(QFont("Segoe UI", 18))  # Slightly smaller than carrier font (22 vs 18)
-                ack_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                ack_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
                 ack_label.setStyleSheet("background: transparent;")
                 ack_label.setWordWrap(False)  # Ensure single line as per requirements
                 
@@ -487,19 +492,120 @@ class AlertDisplay(QWidget):
         self.snooze_end_time = None  # Track when snooze will end
         self.snooze_countdown_timer = None  # Timer for updating countdown display
         
+        # Cache mute status to avoid excessive network calls
+        self._cached_mute_status = False
+        self._last_mute_check = 0
+        self._mute_check_interval = 2  # Check every 2 seconds max
+        
         # Initialize sound effect
         self.setup_sound()
         
         self.setup_ui()
         self.setup_timers()
         self.apply_background_style()  # Initialize background
+        self.initialize_mute_status()  # Check mute status at startup
         self.populate_data()
     
     @property
     def is_snoozed(self):
-        """Check if system is currently muted (centralized)"""
-        muted, _ = self.mute_manager.is_currently_muted()
-        return muted
+        """Check if system is currently muted (centralized) with caching"""
+        import time
+        current_time = time.time()
+        
+        # Only check mute status every 2 seconds to avoid excessive network calls
+        if current_time - self._last_mute_check > self._mute_check_interval:
+            try:
+                muted, _ = self.mute_manager.is_currently_muted()
+                
+                # Check if mute state changed externally (other PC muted/unmuted)
+                if muted != self._cached_mute_status:
+                    print(f"🔔 External mute state change detected: {self._cached_mute_status} → {muted}")
+                    self._handle_external_mute_change(muted)
+                
+                self._cached_mute_status = muted
+                self._last_mute_check = current_time
+            except Exception as e:
+                print(f"❌ Error checking mute status: {e}")
+                # Return cached status if network call fails
+        
+        return self._cached_mute_status
+    
+    def _handle_external_mute_change(self, new_mute_state):
+        """Handle when mute state changes externally (other PC muted/unmuted)"""
+        try:
+            if new_mute_state:
+                # Another PC has muted - start our countdown if we have an active alert
+                print("📝 Another PC has muted - starting countdown timer")
+                
+                remaining_minutes = self.mute_manager.get_mute_time_remaining()
+                if remaining_minutes and remaining_minutes > 0:
+                    from datetime import datetime, timedelta
+                    self.snooze_end_time = datetime.now() + timedelta(minutes=remaining_minutes)
+                    
+                    # Start countdown timer (not auto-resume since mute_manager handles that)
+                    if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
+                        self.snooze_countdown_timer.start(1000)
+                        
+                    print(f"📝 Started countdown for {remaining_minutes} minutes")
+                    
+            else:
+                # Another PC has unmuted - stop our countdown
+                print("📝 Another PC has unmuted - stopping countdown timer")
+                
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+                    self.snooze_countdown_timer.stop()
+                self.snooze_end_time = None
+                
+            # Update button appearance
+            self.update_snooze_button_icon()
+            
+        except Exception as e:
+            print(f"❌ Error handling external mute change: {e}")
+    
+    def refresh_mute_status(self):
+        """Force refresh of mute status (call after toggle_snooze)"""
+        self._last_mute_check = 0  # Force refresh on next check
+    
+    def initialize_mute_status(self):
+        """Initialize mute status at startup - handle external mutes and expired mutes"""
+        try:
+            print("🔧 Initializing mute status at startup...")
+            
+            # Force a fresh check (bypass cache)
+            self._last_mute_check = 0
+            is_muted = self.is_snoozed
+            
+            if is_muted:
+                print("📝 App started in muted state - checking if countdown needed...")
+                
+                # Get detailed mute status to check remaining time
+                mute_status = self.mute_manager.get_mute_status()
+                remaining_minutes = self.mute_manager.get_mute_time_remaining()
+                
+                if remaining_minutes and remaining_minutes > 0:
+                    print(f"📝 Mute has {remaining_minutes} minutes remaining - starting countdown")
+                    
+                    # Set up countdown for external mute
+                    from datetime import datetime, timedelta
+                    self.snooze_end_time = datetime.now() + timedelta(minutes=remaining_minutes)
+                    
+                    # Start countdown timer (but not auto-resume timer since mute_manager handles that)
+                    if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
+                        self.snooze_countdown_timer.start(1000)  # Update every second
+                        
+                    # Update button appearance
+                    self.update_snooze_button_icon()
+                    
+                else:
+                    print("📝 Mute has expired or no time limit - should be auto-unmuted")
+                    
+            else:
+                print("📝 App started in unmuted state")
+                
+        except Exception as e:
+            print(f"❌ Error initializing mute status: {e}")
+            import traceback
+            traceback.print_exc()
     
     def setup_ui(self):
         """Create the modern card layout"""
@@ -968,44 +1074,57 @@ class AlertDisplay(QWidget):
         if not self.alert_active:
             return  # Only allow mute during active alerts
         
-        # Get current user name (you might want to make this configurable)
-        import os
-        current_user = os.getenv('USERNAME', 'Unknown')
-        
-        # Toggle mute status with 5-minute duration
-        was_muted = self.is_snoozed
-        new_state, message = self.mute_manager.toggle_mute(current_user, 5)
-        
-        if new_state and not was_muted:
-            # Just muted - stop the sound and start local timers for UI feedback
-            if self.alert_sound:
-                self.alert_sound.stop()
-            self.alarm_sound_playing = False
+        try:
+            # Get current user name
+            import os
+            current_user = os.getenv('USERNAME', 'Unknown')
             
-            # Set local snooze end time for UI countdown display
-            import datetime as dt
-            self.snooze_end_time = dt.datetime.now() + dt.timedelta(minutes=5)
-            self.snooze_timer.start(300000)  # 5 minutes = 300,000 milliseconds
-            self.snooze_countdown_timer.start(1000)  # Update every second
+            # Toggle mute status with 5-minute duration
+            was_muted = self.is_snoozed
+            new_state, message = self.mute_manager.toggle_mute(current_user, 5)
             
-            print(f"🔇 Alerts muted for 5 minutes by {current_user}")
+            if new_state and not was_muted:
+                # Just muted - stop the sound and start local timers for UI feedback
+                if self.alert_sound:
+                    self.alert_sound.stop()
+                self.alarm_sound_playing = False
+                
+                # Set local snooze end time for UI countdown display
+                from datetime import datetime, timedelta
+                self.snooze_end_time = datetime.now() + timedelta(minutes=5)
+                
+                # Start timers safely
+                if hasattr(self, 'snooze_timer') and self.snooze_timer:
+                    self.snooze_timer.start(300000)  # 5 minutes = 300,000 milliseconds
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
+                    self.snooze_countdown_timer.start(1000)  # Update every second
+                
+                print(f"🔇 Alerts muted for 5 minutes by {current_user}")
+                
+            elif not new_state and was_muted:
+                # Just unmuted - resume sound and stop local timers
+                if hasattr(self, 'snooze_timer') and self.snooze_timer and self.snooze_timer.isActive():
+                    self.snooze_timer.stop()
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+                    self.snooze_countdown_timer.stop()
+                self.snooze_end_time = None
+                
+                if self.alert_sound and self.alert_active:
+                    self.alarm_sound_playing = True
+                    self.alert_sound.play()
+                
+                print(f"🔊 Alerts unmuted by {current_user}")
             
-        elif not new_state and was_muted:
-            # Just unmuted - resume sound and stop local timers
-            if self.snooze_timer and self.snooze_timer.isActive():
-                self.snooze_timer.stop()
-            if self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
-                self.snooze_countdown_timer.stop()
-            self.snooze_end_time = None
+            # Update button appearance
+            self.update_snooze_button_icon()
             
-            if self.alert_sound and self.alert_active:
-                self.alarm_sound_playing = True
-                self.alert_sound.play()
+            # Force refresh mute status cache
+            self.refresh_mute_status()
             
-            print(f"🔊 Alerts unmuted by {current_user}")
-        
-        # Update button appearance
-        self.update_snooze_button_icon()
+        except Exception as e:
+            print(f"❌ Error in toggle_snooze: {e}")
+            import traceback
+            traceback.print_exc()
     
     def auto_resume_sound(self):
         """Auto-resume sound after 5-minute mute period (centralized mute auto-expires)"""
@@ -1028,35 +1147,42 @@ class AlertDisplay(QWidget):
     
     def update_snooze_countdown(self):
         """Update the snooze countdown display every second"""
-        if not self.is_snoozed or not self.snooze_end_time:
-            # Stop countdown if no longer snoozed
-            if self.snooze_countdown_timer.isActive():
+        try:
+            if not self.is_snoozed or not self.snooze_end_time:
+                # Stop countdown if no longer snoozed
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+                    self.snooze_countdown_timer.stop()
+                return
+            
+            from datetime import datetime
+            now = datetime.now()
+            
+            if now >= self.snooze_end_time:
+                # Countdown finished - this shouldn't happen as auto_resume_sound should handle it
+                # but included as safety check
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+                    self.snooze_countdown_timer.stop()
+                return
+            
+            # Calculate remaining time
+            time_remaining = self.snooze_end_time - now
+            total_seconds = int(time_remaining.total_seconds())
+            
+            if total_seconds <= 0:
+                # Time's up
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+                    self.snooze_countdown_timer.stop()
+                return
+            
+            # Update the summary display without triggering full data refresh
+            # This prevents interfering with the main data refresh cycle
+            self.update_summary_with_countdown(total_seconds)
+            
+        except Exception as e:
+            print(f"❌ Error in update_snooze_countdown: {e}")
+            # Stop the timer if there's an error to prevent repeated failures
+            if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
                 self.snooze_countdown_timer.stop()
-            return
-        
-        import datetime as dt
-        now = dt.datetime.now()
-        
-        if now >= self.snooze_end_time:
-            # Countdown finished - this shouldn't happen as auto_resume_sound should handle it
-            # but included as safety check
-            if self.snooze_countdown_timer.isActive():
-                self.snooze_countdown_timer.stop()
-            return
-        
-        # Calculate remaining time
-        time_remaining = self.snooze_end_time - now
-        total_seconds = int(time_remaining.total_seconds())
-        
-        if total_seconds <= 0:
-            # Time's up
-            if self.snooze_countdown_timer.isActive():
-                self.snooze_countdown_timer.stop()
-            return
-        
-        # Update the summary display without triggering full data refresh
-        # This prevents interfering with the main data refresh cycle
-        self.update_summary_with_countdown(total_seconds)
     
     def update_summary_with_countdown(self, remaining_seconds):
         """Update summary display with countdown - lightweight version"""
