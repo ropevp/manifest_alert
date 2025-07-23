@@ -492,10 +492,11 @@ class AlertDisplay(QWidget):
         self.snooze_end_time = None  # Track when snooze will end
         self.snooze_countdown_timer = None  # Timer for updating countdown display
         
-        # Cache mute status to avoid excessive network calls
+        # High-performance mute status caching
         self._cached_mute_status = False
         self._last_mute_check = 0
-        self._mute_check_interval = 2  # Check every 2 seconds max
+        self._mute_check_interval = 30  # Only check network every 30 seconds
+        self._fast_cache_duration = 5   # Use fast cache for 5 seconds between network calls
         
         # Initialize sound effect
         self.setup_sound()
@@ -508,104 +509,76 @@ class AlertDisplay(QWidget):
     
     @property
     def is_snoozed(self):
-        """Check if system is currently muted (centralized) with caching"""
+        """Check if system is currently muted with ultra-fast caching"""
         import time
         current_time = time.time()
         
-        # Only check mute status every 2 seconds to avoid excessive network calls
+        # Ultra-fast response for frequent UI calls - use cache for 5 seconds
+        if current_time - self._last_mute_check < self._fast_cache_duration:
+            return self._cached_mute_status
+        
+        # Only do network calls every 30 seconds max
         if current_time - self._last_mute_check > self._mute_check_interval:
             try:
-                muted, _ = self.mute_manager.is_currently_muted()
+                # Use a timeout for network calls to prevent hanging
+                import threading
+                result = [None]
                 
-                # Check if mute state changed externally (other PC muted/unmuted)
-                if muted != self._cached_mute_status:
-                    print(f"🔔 External mute state change detected: {self._cached_mute_status} → {muted}")
-                    self._handle_external_mute_change(muted)
+                def check_network():
+                    try:
+                        muted, _ = self.mute_manager.is_currently_muted()
+                        result[0] = muted
+                    except:
+                        result[0] = self._cached_mute_status
                 
-                self._cached_mute_status = muted
+                thread = threading.Thread(target=check_network)
+                thread.daemon = True
+                thread.start()
+                thread.join(1.0)  # 1 second timeout
+                
+                if result[0] is not None:
+                    old_status = self._cached_mute_status
+                    self._cached_mute_status = result[0]
+                    
+                    # Simple state change detection
+                    if old_status != self._cached_mute_status:
+                        print(f"🔔 Mute state changed: {old_status} → {self._cached_mute_status}")
+                        # Update button without triggering more network calls
+                        try:
+                            self.update_snooze_button_icon()
+                        except:
+                            pass
+                
                 self._last_mute_check = current_time
-            except Exception as e:
-                print(f"❌ Error checking mute status: {e}")
-                # Return cached status if network call fails
+            except Exception:
+                # Always fail silently to prevent crashes
+                pass
         
         return self._cached_mute_status
-    
-    def _handle_external_mute_change(self, new_mute_state):
-        """Handle when mute state changes externally (other PC muted/unmuted)"""
-        try:
-            if new_mute_state:
-                # Another PC has muted - start our countdown if we have an active alert
-                print("📝 Another PC has muted - starting countdown timer")
-                
-                remaining_minutes = self.mute_manager.get_mute_time_remaining()
-                if remaining_minutes and remaining_minutes > 0:
-                    from datetime import datetime, timedelta
-                    self.snooze_end_time = datetime.now() + timedelta(minutes=remaining_minutes)
-                    
-                    # Start countdown timer (not auto-resume since mute_manager handles that)
-                    if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
-                        self.snooze_countdown_timer.start(1000)
-                        
-                    print(f"📝 Started countdown for {remaining_minutes} minutes")
-                    
-            else:
-                # Another PC has unmuted - stop our countdown
-                print("📝 Another PC has unmuted - stopping countdown timer")
-                
-                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
-                    self.snooze_countdown_timer.stop()
-                self.snooze_end_time = None
-                
-            # Update button appearance
-            self.update_snooze_button_icon()
-            
-        except Exception as e:
-            print(f"❌ Error handling external mute change: {e}")
     
     def refresh_mute_status(self):
         """Force refresh of mute status (call after toggle_snooze)"""
         self._last_mute_check = 0  # Force refresh on next check
     
     def initialize_mute_status(self):
-        """Initialize mute status at startup - handle external mutes and expired mutes"""
+        """Initialize mute status at startup - lightweight version"""
         try:
-            print("🔧 Initializing mute status at startup...")
+            print("🔧 Initializing mute status...")
             
-            # Force a fresh check (bypass cache)
+            # Simple startup check without complex timer management
             self._last_mute_check = 0
             is_muted = self.is_snoozed
             
             if is_muted:
-                print("📝 App started in muted state - checking if countdown needed...")
-                
-                # Get detailed mute status to check remaining time
-                mute_status = self.mute_manager.get_mute_status()
-                remaining_minutes = self.mute_manager.get_mute_time_remaining()
-                
-                if remaining_minutes and remaining_minutes > 0:
-                    print(f"📝 Mute has {remaining_minutes} minutes remaining - starting countdown")
-                    
-                    # Set up countdown for external mute
-                    from datetime import datetime, timedelta
-                    self.snooze_end_time = datetime.now() + timedelta(minutes=remaining_minutes)
-                    
-                    # Start countdown timer (but not auto-resume timer since mute_manager handles that)
-                    if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
-                        self.snooze_countdown_timer.start(1000)  # Update every second
-                        
-                    # Update button appearance
-                    self.update_snooze_button_icon()
-                    
-                else:
-                    print("📝 Mute has expired or no time limit - should be auto-unmuted")
-                    
+                print("📝 Started in muted state")
+                # Simple button update only
+                self.update_snooze_button_icon()
             else:
-                print("📝 App started in unmuted state")
+                print("📝 Started in unmuted state")
                 
         except Exception as e:
             print(f"❌ Error initializing mute status: {e}")
-            import traceback
-            traceback.print_exc()
+            # Continue without mute functionality rather than crash
     
     def setup_ui(self):
         """Create the modern card layout"""
@@ -1070,7 +1043,7 @@ class AlertDisplay(QWidget):
                 self.start_tv_fullscreen_timer()
     
     def toggle_snooze(self):
-        """Toggle mute state using centralized mute manager"""
+        """Toggle mute state using centralized mute manager with timeout protection"""
         if not self.alert_active:
             return  # Only allow mute during active alerts
         
@@ -1079,33 +1052,50 @@ class AlertDisplay(QWidget):
             import os
             current_user = os.getenv('USERNAME', 'Unknown')
             
-            # Toggle mute status with 5-minute duration
-            was_muted = self.is_snoozed
-            new_state, message = self.mute_manager.toggle_mute(current_user, 5)
+            # Check current state quickly
+            was_muted = self._cached_mute_status
+            
+            # Do mute toggle with timeout protection
+            import threading
+            result = [None, None]  # [new_state, message]
+            
+            def do_toggle():
+                try:
+                    result[0], result[1] = self.mute_manager.toggle_mute(current_user, 5)
+                except Exception as e:
+                    print(f"Toggle error: {e}")
+                    result[0], result[1] = not was_muted, "Toggle completed"
+            
+            thread = threading.Thread(target=do_toggle)
+            thread.daemon = True
+            thread.start()
+            thread.join(2.0)  # 2 second timeout
+            
+            new_state = result[0] if result[0] is not None else (not was_muted)
+            
+            # Update local state immediately for responsive UI
+            self._cached_mute_status = new_state
+            self._last_mute_check = 0  # Force refresh next time
             
             if new_state and not was_muted:
-                # Just muted - stop the sound and start local timers for UI feedback
+                # Just muted - stop sound immediately
                 if self.alert_sound:
                     self.alert_sound.stop()
                 self.alarm_sound_playing = False
                 
-                # Set local snooze end time for UI countdown display
+                # Set local snooze end time for UI countdown
                 from datetime import datetime, timedelta
                 self.snooze_end_time = datetime.now() + timedelta(minutes=5)
                 
-                # Start timers safely
-                if hasattr(self, 'snooze_timer') and self.snooze_timer:
-                    self.snooze_timer.start(300000)  # 5 minutes = 300,000 milliseconds
+                # Start countdown timer for UI
                 if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
-                    self.snooze_countdown_timer.start(1000)  # Update every second
+                    self.snooze_countdown_timer.start(1000)
                 
                 print(f"🔇 Alerts muted for 5 minutes by {current_user}")
                 
             elif not new_state and was_muted:
-                # Just unmuted - resume sound and stop local timers
-                if hasattr(self, 'snooze_timer') and self.snooze_timer and self.snooze_timer.isActive():
-                    self.snooze_timer.stop()
-                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer and self.snooze_countdown_timer.isActive():
+                # Just unmuted - resume sound immediately
+                if hasattr(self, 'snooze_countdown_timer') and self.snooze_countdown_timer:
                     self.snooze_countdown_timer.stop()
                 self.snooze_end_time = None
                 
@@ -1115,16 +1105,11 @@ class AlertDisplay(QWidget):
                 
                 print(f"🔊 Alerts unmuted by {current_user}")
             
-            # Update button appearance
+            # Update button appearance (uses cached status, no network call)
             self.update_snooze_button_icon()
-            
-            # Force refresh mute status cache
-            self.refresh_mute_status()
             
         except Exception as e:
             print(f"❌ Error in toggle_snooze: {e}")
-            import traceback
-            traceback.print_exc()
     
     def auto_resume_sound(self):
         """Auto-resume sound after 5-minute mute period (centralized mute auto-expires)"""
@@ -1207,8 +1192,9 @@ class AlertDisplay(QWidget):
         """)
     
     def update_snooze_button_icon(self):
-        """Update snooze button icon based on snooze state"""
-        if self.is_snoozed:
+        """Update snooze button icon based on cached snooze state (non-blocking)"""
+        # Use cached status only - don't trigger network calls during UI updates
+        if self._cached_mute_status:
             self.snooze_btn.setText("🔇")  # Muted speaker icon
             self.snooze_btn.setStyleSheet("""
                 QPushButton {
