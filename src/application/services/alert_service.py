@@ -414,7 +414,7 @@ class AlertService:
         if carrier:
             if status == ManifestStatus.MISSED:
                 title = f"Missed Manifest - {manifest.time}"
-                message = f"Carrier {carrier.name} missed manifest time"
+                message = f"Carrier {carrier.name} MISSED manifest time"
             else:
                 title = f"Manifest Alert - {manifest.time}"
                 message = f"Carrier {carrier.name} requires acknowledgment"
@@ -440,7 +440,9 @@ class AlertService:
             return mute_status.is_muted if mute_status else False
         except Exception as e:
             self.logger.warning(f"Error checking global mute status: {e}")
-            return False
+            # When in doubt, treat as NOT muted but raise the exception
+            # so calculate_layout_mode can handle it appropriately
+            raise
     
     def _is_manifest_muted(self, manifest: Manifest) -> bool:
         """Check if a specific manifest is muted.

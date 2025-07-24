@@ -67,6 +67,20 @@ class Alert:
     sound_enabled: bool = True
     display_duration: float = 0.0
     
+    @property
+    def manifest_time(self) -> Optional[str]:
+        """Get the manifest time if alert is associated with a manifest."""
+        return self.manifest.time if self.manifest else None
+    
+    @property 
+    def carrier_name(self) -> Optional[str]:
+        """Get carrier name if alert is for a specific carrier."""
+        # This would be set during alert creation for carrier-specific alerts
+        # For now, return the first carrier name if manifest exists
+        if self.manifest and self.manifest.carriers:
+            return self.manifest.carriers[0].name
+        return None
+    
     def __post_init__(self) -> None:
         """Validate alert data after initialization."""
         if self.created_at is None:
