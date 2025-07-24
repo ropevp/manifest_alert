@@ -7,12 +7,14 @@ from .custom_exceptions import (
     ManifestAlertException,
     NetworkAccessException,
     DataValidationException,
-    ConfigurationException
+    ConfigurationException,
+    BusinessLogicException
 )
 
 __all__ = [
     "ManifestAlertException",
     "NetworkAccessException", 
     "DataValidationException",
-    "ConfigurationException"
+    "ConfigurationException",
+    "BusinessLogicException"
 ]

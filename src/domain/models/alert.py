@@ -18,6 +18,9 @@ class AlertType(Enum):
     MANIFEST_ACTIVE = "manifest_active"    # Manifest time has arrived
     MANIFEST_MISSED = "manifest_missed"    # Manifest time was missed
     SYSTEM_ERROR = "system_error"          # System error alert
+    VISUAL = "visual"                      # Visual alert
+    AUDIO = "audio"                        # Audio alert
+    CARRIER = "carrier"                    # Carrier-specific alert
 
 
 class AlertPriority(Enum):

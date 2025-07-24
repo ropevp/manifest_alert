@@ -108,3 +108,28 @@ class ConfigurationException(ManifestAlertException):
         if setting:
             details.append(f"Setting: {setting}")
         super().__init__(message, " | ".join(details) if details else None)
+
+
+class BusinessLogicException(ManifestAlertException):
+    """Raised when business logic operations fail.
+    
+    This exception is used when business operations fail due to invalid
+    states, constraint violations, or other business rule violations.
+    """
+    
+    def __init__(self, message: str, operation: Optional[str] = None, context: Optional[str] = None):
+        """Initialize the business logic exception.
+        
+        Args:
+            message: The main error message
+            operation: The business operation that failed
+            context: Additional context about the failure
+        """
+        self.operation = operation
+        self.context = context
+        details = []
+        if operation:
+            details.append(f"Operation: {operation}")
+        if context:
+            details.append(f"Context: {context}")
+        super().__init__(message, " | ".join(details) if details else None)
