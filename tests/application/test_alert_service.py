@@ -215,8 +215,8 @@ class TestAlertService(unittest.TestCase):
         manifest = self._create_test_manifest("10:25", ["FEDEX"])  # Should be active
         carrier = manifest.carriers[0]
         
-        # Test
-        alert = self.alert_service.create_alert(manifest, carrier, AlertType.CARRIER)
+        # Test - pass test_time to ensure consistent timing
+        alert = self.alert_service.create_alert(manifest, carrier, AlertType.CARRIER, self.test_time)
         
         # Verify
         self.assertEqual(alert.priority, AlertPriority.MEDIUM)
@@ -240,14 +240,14 @@ class TestAlertService(unittest.TestCase):
         alerts = self.alert_service.get_prioritized_alerts(manifests, self.test_time)
         
         # Verify
-        self.assertEqual(len(alerts), 6)  # 2 manifest + 4 carrier alerts
+        self.assertEqual(len(alerts), 5)  # 2 manifest + 3 carrier alerts
         
         # Check priority ordering (high priority first)
         high_priority_alerts = [a for a in alerts if a.priority == AlertPriority.HIGH]
         medium_priority_alerts = [a for a in alerts if a.priority == AlertPriority.MEDIUM]
         
         self.assertEqual(len(high_priority_alerts), 2)  # 1 manifest + 1 carrier
-        self.assertEqual(len(medium_priority_alerts), 4)  # 1 manifest + 2 carriers
+        self.assertEqual(len(medium_priority_alerts), 3)  # 1 manifest + 2 carriers
         
         # First alert should be high priority
         self.assertEqual(alerts[0].priority, AlertPriority.HIGH)

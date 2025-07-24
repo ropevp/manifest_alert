@@ -44,7 +44,11 @@ class TestLayoutService(unittest.TestCase):
                             acknowledged: bool = False) -> Manifest:
         """Create a test manifest with carriers."""
         carriers = [Carrier(name) for name in carrier_names]
-        manifest = Manifest(time=time_str, carriers=carriers)
+        manifest = Manifest(
+            time=time_str, 
+            date="2025-01-15",  # Match test_time date
+            carriers=carriers
+        )
         
         if acknowledged:
             for carrier in carriers:

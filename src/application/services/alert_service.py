@@ -258,7 +258,7 @@ class AlertService:
             alert_id = alert_id.replace(":", "").replace("-", "")
             
             # Generate title and message
-            title, message = self._generate_alert_title_message(manifest, carrier)
+            title, message = self._generate_alert_title_message(manifest, carrier, current_time)
             
             alert = Alert(
                 alert_id=alert_id,
@@ -296,16 +296,18 @@ class AlertService:
             for manifest in manifests:
                 if self.should_trigger_alert(manifest, current_time):
                     # Create manifest-level alert
-                    alert = self.create_alert(manifest, alert_type=AlertType.VISUAL)
+                    alert = self.create_alert(manifest, alert_type=AlertType.VISUAL, current_time=current_time)
                     alerts.append(alert)
                     
                     # Create carrier-specific alerts for unacknowledged carriers
                     for carrier in manifest.get_unacknowledged_carriers():
-                        carrier_alert = self.create_alert(manifest, carrier, AlertType.CARRIER)
+                        carrier_alert = self.create_alert(manifest, carrier, AlertType.CARRIER, current_time)
                         alerts.append(carrier_alert)
             
             # Sort by priority (high to low) then by time
-            alerts.sort(key=lambda a: (a.priority.value, a.manifest.time if a.manifest else ""), reverse=True)
+            # Use priority order: HIGH=3, MEDIUM=2, LOW=1 for proper sorting
+            priority_order = {AlertPriority.HIGH: 3, AlertPriority.MEDIUM: 2, AlertPriority.LOW: 1}
+            alerts.sort(key=lambda a: (priority_order[a.priority], a.manifest.time if a.manifest else ""), reverse=True)
             
             self.logger.debug(f"Generated {len(alerts)} prioritized alerts")
             return alerts
@@ -374,17 +376,19 @@ class AlertService:
             return AlertPriority.LOW
     
     def _generate_alert_message(self, manifest: Manifest, 
-                               carrier: Optional[Carrier] = None) -> str:
+                               carrier: Optional[Carrier] = None,
+                               current_time: Optional[datetime] = None) -> str:
         """Generate human-readable alert message.
         
         Args:
             manifest: Manifest for the alert
             carrier: Optional specific carrier
+            current_time: Current time for status calculation
             
         Returns:
             Alert message string
         """
-        status = manifest.get_status()
+        status = manifest.get_status(current_time)
         
         if carrier:
             if status == ManifestStatus.MISSED:
@@ -399,33 +403,35 @@ class AlertService:
                 return f"ALERT: {manifest.time} - {unack_count} carriers"
     
     def _generate_alert_title_message(self, manifest: Manifest, 
-                                     carrier: Optional[Carrier] = None) -> tuple:
+                                     carrier: Optional[Carrier] = None,
+                                     current_time: Optional[datetime] = None) -> tuple:
         """Generate alert title and message.
         
         Args:
             manifest: Manifest for the alert
             carrier: Optional specific carrier
+            current_time: Current time for status calculation
             
         Returns:
             Tuple of (title, message)
         """
-        status = manifest.get_status()
+        status = manifest.get_status(current_time)
         
         if carrier:
             if status == ManifestStatus.MISSED:
                 title = f"Missed Manifest - {manifest.time}"
-                message = f"Carrier {carrier.name} MISSED manifest time"
+                message = f"MISSED: {manifest.time} - {carrier.name}"
             else:
                 title = f"Manifest Alert - {manifest.time}"
-                message = f"Carrier {carrier.name} requires acknowledgment"
+                message = f"ALERT: {manifest.time} - {carrier.name}"
         else:
             unack_count = len(manifest.get_unacknowledged_carriers())
             if status == ManifestStatus.MISSED:
                 title = f"Missed Manifest - {manifest.time}"
-                message = f"Manifest missed with {unack_count} unacknowledged carriers"
+                message = f"MISSED: {manifest.time} - {unack_count} carriers"
             else:
                 title = f"Manifest Alert - {manifest.time}"
-                message = f"Manifest active with {unack_count} unacknowledged carriers"
+                message = f"ALERT: {manifest.time} - {unack_count} carriers"
         
         return title, message
     
