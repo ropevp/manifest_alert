@@ -17,7 +17,6 @@ from .timeout_context import timeout_context, TimeoutException, NetworkTimeoutMa
 from ...infrastructure.exceptions import NetworkAccessException
 from ...infrastructure.cache import CacheManager
 
-
 class NetworkService:
     """High-performance network service with aggressive caching and timeout protection.
     
