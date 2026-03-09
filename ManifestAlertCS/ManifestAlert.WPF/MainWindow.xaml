@@ -59,9 +59,9 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
 
-                    <!-- Active Alerts — uses HasActiveAlerts (bool) -->
+                    <!-- Active Alerts -->
                     <Border Background="#FF9800" CornerRadius="4" Padding="12,8" Margin="8,0"
-                            Visibility="{Binding HasActiveAlerts, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding ActiveAlertCount, Converter={StaticResource IntToVis}}">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="AlertCircle" Width="24" Height="24"
                                                      VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -70,9 +70,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Missed Alerts — uses HasMissedAlerts (bool) -->
+                    <!-- Missed Alerts -->
                     <Border Background="#F44336" CornerRadius="4" Padding="12,8" Margin="8,0"
-                            Visibility="{Binding HasMissedAlerts, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding MissedAlertCount, Converter={StaticResource IntToVis}}">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="AlertOctagon" Width="24" Height="24"
                                                      VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -203,10 +203,10 @@
                                                             </TextBlock.Style>
                                                         </TextBlock>
 
-                                                        <!-- Customer Message (read mode) — uses HasCustomerMessage (bool) -->
+                                                        <!-- Customer Message (read mode) -->
                                                         <TextBlock Text="{Binding CustomerMessage}"
                                                                    FontSize="12" Opacity="0.7" Margin="0,4,0,0"
-                                                                   Visibility="{Binding HasCustomerMessage, Converter={StaticResource BoolToVis}}"
+                                                                   Visibility="{Binding CustomerMessage, Converter={StaticResource StringToVis}}"
                                                                    TextWrapping="Wrap"/>
 
                                                         <!-- Message Edit TextBox (edit mode) -->

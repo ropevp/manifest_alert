@@ -30,7 +30,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private int _missedAlertCount;
     private bool _hasActiveAlerts;
     private bool _hasMissedAlerts;
-    private bool _isRefreshing;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _disposed;
 
     private DateTime _lastAnnouncementTime = DateTime.MinValue;
@@ -160,8 +160,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private async Task RefreshAsync()
     {
         // Guard against concurrent refreshes
-        if (_isRefreshing) return;
-        _isRefreshing = true;
+        if (!await _refreshLock.WaitAsync(0)) return;
 
         try
         {
@@ -233,7 +232,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            _isRefreshing = false;
+            _refreshLock.Release();
         }
     }
 
@@ -366,5 +365,6 @@ public class MainViewModel : ViewModelBase, IDisposable
         _refreshTimer.Stop();
         _countdownTimer.Stop();
         _voiceService.Dispose();
+        _refreshLock.Dispose();
     }
 }
