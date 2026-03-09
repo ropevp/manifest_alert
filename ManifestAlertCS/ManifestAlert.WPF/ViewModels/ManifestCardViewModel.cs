@@ -11,7 +11,7 @@ namespace ManifestAlert.WPF.ViewModels;
 /// </summary>
 public class ManifestCardViewModel : ViewModelBase
 {
-    private readonly ManifestService _manifestService;
+    internal readonly ManifestService _manifestService;
     private readonly Manifest _manifest;
     private string _statusText = string.Empty;
     private string _statusColor = "#4CAF50";
@@ -176,6 +176,8 @@ public class CarrierViewModel : ViewModelBase
         set => SetProperty(ref _isEditingMessage, value);
     }
 
+    public bool HasCustomerMessage => !string.IsNullOrEmpty(_customerMessage);
+
     public string DisplayText
     {
         get
@@ -199,6 +201,7 @@ public class CarrierViewModel : ViewModelBase
         IsAcknowledged = _carrier.IsAcknowledged;
         AcknowledgedBy = _carrier.AcknowledgedBy;
         CustomerMessage = _carrier.CustomerMessage;
+        OnPropertyChanged(nameof(HasCustomerMessage));
         OnPropertyChanged(nameof(DisplayText));
     }
 

@@ -13,10 +13,10 @@
         FontFamily="{materialDesign:MaterialDesignFont}"
         TextElement.Foreground="{DynamicResource MaterialDesignBody}"
         TextElement.FontWeight="Regular"
-        TextElement.FontSize="14">
+        TextElement.FontSize="14"
+        Closing="Window_Closing">
 
     <Window.Resources>
-        <!-- Converter for visibility -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </Window.Resources>
 
@@ -59,9 +59,9 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
 
-                    <!-- Active Alerts -->
+                    <!-- Active Alerts — uses HasActiveAlerts (bool) -->
                     <Border Background="#FF9800" CornerRadius="4" Padding="12,8" Margin="8,0"
-                            Visibility="{Binding ActiveAlertCount, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding HasActiveAlerts, Converter={StaticResource BoolToVis}}">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="AlertCircle" Width="24" Height="24"
                                                      VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -70,9 +70,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Missed Alerts -->
+                    <!-- Missed Alerts — uses HasMissedAlerts (bool) -->
                     <Border Background="#F44336" CornerRadius="4" Padding="12,8" Margin="8,0"
-                            Visibility="{Binding MissedAlertCount, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding HasMissedAlerts, Converter={StaticResource BoolToVis}}">
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="AlertOctagon" Width="24" Height="24"
                                                      VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -203,11 +203,37 @@
                                                             </TextBlock.Style>
                                                         </TextBlock>
 
-                                                        <!-- Customer Message -->
+                                                        <!-- Customer Message (read mode) — uses HasCustomerMessage (bool) -->
                                                         <TextBlock Text="{Binding CustomerMessage}"
                                                                    FontSize="12" Opacity="0.7" Margin="0,4,0,0"
-                                                                   Visibility="{Binding CustomerMessage, Converter={StaticResource BoolToVis}}"
+                                                                   Visibility="{Binding HasCustomerMessage, Converter={StaticResource BoolToVis}}"
                                                                    TextWrapping="Wrap"/>
+
+                                                        <!-- Message Edit TextBox (edit mode) -->
+                                                        <Grid Visibility="{Binding IsEditingMessage, Converter={StaticResource BoolToVis}}"
+                                                              Margin="0,4,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBox Grid.Column="0"
+                                                                     Text="{Binding CustomerMessage, UpdateSourceTrigger=PropertyChanged}"
+                                                                     materialDesign:HintAssist.Hint="Customer message..."
+                                                                     FontSize="12"/>
+                                                            <Button Grid.Column="1"
+                                                                    Command="{Binding SaveMessageCommand}"
+                                                                    Style="{StaticResource MaterialDesignIconButton}"
+                                                                    ToolTip="Save" Margin="4,0,0,0">
+                                                                <materialDesign:PackIcon Kind="Check"/>
+                                                            </Button>
+                                                            <Button Grid.Column="2"
+                                                                    Command="{Binding CancelEditCommand}"
+                                                                    Style="{StaticResource MaterialDesignIconButton}"
+                                                                    ToolTip="Cancel">
+                                                                <materialDesign:PackIcon Kind="Close"/>
+                                                            </Button>
+                                                        </Grid>
 
                                                         <!-- Acknowledged By -->
                                                         <TextBlock Text="{Binding AcknowledgedBy, StringFormat='Ack by: {0}'}"
@@ -287,7 +313,7 @@
             </Grid>
         </materialDesign:ColorZone>
 
-        <!-- Mute Overlay (Optional - shows when muted) -->
+        <!-- Mute Overlay (shows when muted) -->
         <Border Grid.RowSpan="3" Background="#80000000"
                 Visibility="{Binding IsMuted, Converter={StaticResource BoolToVis}}"
                 IsHitTestVisible="False">

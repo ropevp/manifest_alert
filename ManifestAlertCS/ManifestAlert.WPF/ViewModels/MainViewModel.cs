@@ -11,7 +11,7 @@ namespace ManifestAlert.WPF.ViewModels;
 /// <summary>
 /// Main ViewModel for the application
 /// </summary>
-public class MainViewModel : ViewModelBase
+public class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly ManifestService _manifestService;
     private readonly AlertService _alertService;
@@ -28,6 +28,14 @@ public class MainViewModel : ViewModelBase
     private bool _showCountdown;
     private int _activeAlertCount;
     private int _missedAlertCount;
+    private bool _hasActiveAlerts;
+    private bool _hasMissedAlerts;
+    private bool _isRefreshing;
+    private bool _disposed;
+
+    private DateTime _lastAnnouncementTime = DateTime.MinValue;
+    private readonly TimeSpan _announcementInterval = TimeSpan.FromMinutes(2);
+    private readonly HashSet<string> _announcedAlertKeys = new();
 
     public MainViewModel(
         ManifestService manifestService,
@@ -104,13 +112,33 @@ public class MainViewModel : ViewModelBase
     public int ActiveAlertCount
     {
         get => _activeAlertCount;
-        set => SetProperty(ref _activeAlertCount, value);
+        set
+        {
+            if (SetProperty(ref _activeAlertCount, value))
+                HasActiveAlerts = value > 0;
+        }
     }
 
     public int MissedAlertCount
     {
         get => _missedAlertCount;
-        set => SetProperty(ref _missedAlertCount, value);
+        set
+        {
+            if (SetProperty(ref _missedAlertCount, value))
+                HasMissedAlerts = value > 0;
+        }
+    }
+
+    public bool HasActiveAlerts
+    {
+        get => _hasActiveAlerts;
+        set => SetProperty(ref _hasActiveAlerts, value);
+    }
+
+    public bool HasMissedAlerts
+    {
+        get => _hasMissedAlerts;
+        set => SetProperty(ref _hasMissedAlerts, value);
     }
 
     public ICommand MuteCommand { get; }
@@ -131,6 +159,10 @@ public class MainViewModel : ViewModelBase
 
     private async Task RefreshAsync()
     {
+        // Guard against concurrent refreshes
+        if (_isRefreshing) return;
+        _isRefreshing = true;
+
         try
         {
             // Get today's manifests
@@ -190,7 +222,7 @@ public class MainViewModel : ViewModelBase
             await UpdateMuteStatusAsync();
 
             // Check for new alerts to announce
-            if (!IsMuted && summary.ActiveAlertCount > 0)
+            if (!IsMuted && (summary.ActiveAlertCount > 0 || summary.MissedAlertCount > 0))
             {
                 await AnnounceAlertsAsync(summary);
             }
@@ -198,6 +230,10 @@ public class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error refreshing manifests");
+        }
+        finally
+        {
+            _isRefreshing = false;
         }
     }
 
@@ -236,6 +272,8 @@ public class MainViewModel : ViewModelBase
         try
         {
             var status = await _muteService.GetCurrentStatusAsync();
+            if (status == null) return;
+
             IsMuted = status.IsCurrentlyMuted();
             MuteStatusText = status.GetSummary();
 
@@ -281,15 +319,19 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    private DateTime _lastAnnouncementTime = DateTime.MinValue;
-    private readonly TimeSpan _announcementInterval = TimeSpan.FromMinutes(2);
-
     private async Task AnnounceAlertsAsync(AlertSummary summary)
     {
         try
         {
-            // Throttle announcements
-            if (DateTime.Now - _lastAnnouncementTime < _announcementInterval)
+            // Build a key representing the current alert state
+            var alertKey = $"active:{summary.ActiveAlertCount}|missed:{summary.MissedAlertCount}";
+
+            // Only announce if this is a new alert state or interval has elapsed
+            var now = DateTime.Now;
+            var intervalElapsed = now - _lastAnnouncementTime >= _announcementInterval;
+            var isNewAlert = !_announcedAlertKeys.Contains(alertKey);
+
+            if (!isNewAlert && !intervalElapsed)
                 return;
 
             if (summary.ActiveAlertCount > 0 || summary.MissedAlertCount > 0)
@@ -307,12 +349,22 @@ public class MainViewModel : ViewModelBase
                 }
 
                 await _voiceService.AnnounceAsync(message);
-                _lastAnnouncementTime = DateTime.Now;
+                _lastAnnouncementTime = now;
+                _announcedAlertKeys.Add(alertKey);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error announcing alerts");
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _refreshTimer.Stop();
+        _countdownTimer.Stop();
+        _voiceService.Dispose();
     }
 }
